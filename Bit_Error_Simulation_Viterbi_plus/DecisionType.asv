@@ -1,0 +1,19 @@
+function [ output_args ] = DecisionType( LLRData, k, TrCHFrameSize )
+switch Decision
+    case 'HardDecision'
+        HardDecisionArray = zeros(k,TrCHFrameSize);
+        for i = 1:length(rxSymb)
+            for ii =1:k
+                if LLRData.BitLLR(i,ii)>=0
+                    HardDecisionArray(ii,i)=1;
+                end
+            end
+        end
+        DecisionType = HardDecisionArray;
+    case 'SoftDecision'
+        DecisionType = LLRData.BitLLR;
+end
+
+
+end
+

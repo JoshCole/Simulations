@@ -1,0 +1,94 @@
+% For BPSK system
+% -----------------
+clear all
+close all
+
+% System configuration
+% ------------
+b = 4;                              % Distance between bits
+M = 2^b;
+k = log2(M);                        % Bits per symbol
+N = 1e3;                            % Number of symbols in simulatio
+A = 1;                              % Amplitude
+Es = ((2*(M-1))/3)*A^2;             % Energy per symbol
+Eb = Es / k;                        % Energy per bit
+EbNo_dB(:,1) = linspace(0, 10, 11); % Energy per bit to noise power spectral density ratio (Eb/No)
+EbNo_lin(:,1) = 10.^(EbNo_dB / 10); % Eb/No values in linear scale
+
+% Define Arrays
+% ------------
+diffInxArray = zeros(length(EbNo_lin),N);
+rxIdx = zeros(length(EbNo_lin),N);
+bit_err = zeros(1,length(EbNo_lin));
+diffMinArray = zeros(length(EbNo_lin),N);
+meanrxSymb = zeros(length(EbNo_lin),1);
+meanAWGN = zeros(length(EbNo_lin),1);
+meansymbArray = zeros(length(EbNo_lin),1);
+meantxSymb = zeros(length(EbNo_lin),1);
+meanNoise  = zeros(length(EbNo_lin),1);
+rxBits  = zeros(k,N);
+
+% Symbol definition
+% ------------
+symbArray =[-1,1];
+
+% Define AWGN
+AWGN = ((randn(1,N))+1i*(randn(1,N)))/sqrt(2);
+
+figure(1)
+plot(symbArray,'o')
+%text(symbArray,labels,'VerticalAlignment','bottom', ...
+%                             'HorizontalAlignment','right')
+
+%Modulation
+% Random bit array for transmittion
+txBits = reshape((rand(N*k,1) > 0.5),k,[]);
+
+% Convert bits to Decimal
+idx =  txBits;
+% From look up table determine symbol to be transmitted
+txSymb = symbArray(idx+1);
+
+% Define Arrays
+bit_err = zeros(size(EbNo_lin));
+decIndex = zeros(1,N);
+rxBits = zeros(1,N);
+rxSymb = zeros(length(EbNo_lin),N);
+diffAll = zeros(length(symbArray),N);
+diffMin = zeros(length(EbNo_lin),N);
+
+for i = 1:length(EbNo_lin)
+    % Adding AWGN to symbol
+    rxSymb(i,:) = txSymb + sqrt(Eb/(EbNo_lin(i)))*AWGN;
+    % Demodulation
+    for ii = 1:N
+        % Euclidean distance between recieved signal and symbol array
+        diffAll(:,ii) = reshape(abs(symbArray-rxSymb(i,ii)).^2,length(symbArray),[]);
+        % Minimum Euclidean distance and associated index
+        [diff,rxidx] = min(diffAll(:,ii));
+        diffMin(i,ii) = diff;
+        % Creates array of decimal index
+        decIndex(ii)= rxidx-1;
+        biStream = Bi2Dec( decIndex(ii), k );
+        % Creates array of recieved bits
+        rxBits(:,ii) = reshape(biStream',k,[]);
+    end
+        bit_err(i) = sum(rxBits(:) ~= txBits(:));
+end
+
+% Bit Error
+bit_err = bit_err / (k * N);
+bit_err_theo = 0.5*erfc(sqrt(2*EbNo_lin)/sqrt(2));
+
+% Plot Results
+
+figure(2)
+semilogy(EbNo_dB,bit_err_theo,'b.-');
+hold on
+semilogy(EbNo_dB,bit_err,'mx-');
+grid on
+
+legend('Theory', 'Simulation');
+xlabel('Eb/No, dB');
+ylabel('Bit Error Rate');
+title('Bit error probability curve for QPSK modulation');

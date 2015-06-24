@@ -1,0 +1,71 @@
+function [ yi ] = RateMatching( xi, Xi, DeltaNij,  Eini , Eplus , Eminus, yi, Fi )
+% RateMatching
+%
+% This function calculates Punctures or Reapeats Bits in respect to the
+% rate matching pattern defined by Eini, Eplus , Eminus,
+%
+% Usage :
+%
+% [ yi ] = RateMatching( xi, Xi, DeltaNij,  Eini , Eplus , Eminus, yi, Fi )
+%
+% Where         xi          = Is the current packet
+%
+%				Xi          = Is the simulated Frame length, Not the Length
+%                             of xi
+%
+%				DeltaNij	= Negative puncturing is required of size
+%                             DeltaNij for each frame. Positive repatition
+%                             is required of size DeltaNij for each frame
+%
+%				Eini		= Initial value of e in rate matching algorithm
+%							  This is different for each frame in the TTI therefore
+%							  a vector is returned with each element containing
+%							  the parameter value for each parameter.
+%
+%               Eplus       = Updateds Inital Error Error
+%               Eminus       = Updateds Inital Error Error
+
+if DeltaNij ~= 0                    % If Rate Matching is required
+    M=1;
+    for i = 1:Fi
+        arrayIndex = 1;             % New array size index
+        if DeltaNij<0
+            E=Eini(i);              % Inital error between current and desired puncturing ratio
+            m=1;                    % Index for current frame size
+            tempIndex = 1;
+            while(m<=Xi)
+                E = E-Eminus;       % Update Error
+                if E<=0             % Check if bit number m should be punctured
+                    arrayIndex = arrayIndex -1;
+                    E = E+Eplus;
+                end
+                if tempIndex == arrayIndex          % Determines when a bit in the frame is to be kept
+                    yi(arrayIndex,i) = xi(M);
+                    tempIndex = tempIndex+1;
+                end
+                arrayIndex = arrayIndex +1;         % Update Indexing
+                m = m+1;
+                M = M+1;
+            end
+        else
+            E = Eini(i);            % Initial error between current and desired puncturing ratio
+            m = 1;                  % Index of current bit
+            while m <=Xi
+                E = E-Eminus;       % Update error
+                yi(arrayIndex,i) = xi(m,i);
+                while E<=0          % Check if bit number m should be repeared
+                    arrayIndex = arrayIndex+1;
+                    yi(arrayIndex,i) = xi(M);
+                    E=E+Eplus;      % Update error
+                end
+                arrayIndex = arrayIndex+1;
+                m = m+1;            % Next bit
+                M = M+1;
+            end
+        end
+    end
+else
+    yi = xi;
+end
+end
+

@@ -1,0 +1,13 @@
+function [ diff ] = eculideanDistance( symbArray, rxSymb)
+[M,N] = size(rxSymb);
+for i = 1:M
+    for ii = 1:N
+        [m,n] = size(rxSymb{i,ii});
+        for j = 1:m
+            for jj = 1:n
+               diff = reshape(abs(symbArray- rxSymb{i,ii}(j,jj)).^2,length(symbArray),[]);
+            end
+        end
+    end
+end
+

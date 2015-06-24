@@ -1,0 +1,42 @@
+function [ RxSymbol ] = AddBurstError( RxSymbol, Esnorm, No, ErrorBurstSymbolSize, NumberOfBurstError, TrCHFrameSize )
+% AddBurstError
+%
+% This function Adds burst errors to each packet
+%
+% Usage :
+%
+% [ RxSymbol ] = AddBurstError( RxSymbol, Esnorm, No, ErrorBurstSymbolSize,
+% NumberOfBurstError, TrCHFrameSize )
+%
+% Where         RxSymbol                = Recieved Symbols
+%
+%				Esnorm                  = The Normalisation factor for the current
+%                                           Symbol array, i.e. for 16-QAM Esnorm = 10
+%
+%				No                      = Noise Spectral Density
+%
+%               ErrorBurstSymbolSize    = Number of Symbols in a row with
+%                                         Potential Errors
+%               NumberOfBurstError      = Number of Burst Errors to be
+%                                         implmented
+
+SplitRxSymbol = 2^NumberOfBurstError;
+tempArray = reshape(RxSymbol,[],SplitRxSymbol);     % Splits array 
+[M,N] = size(tempArray);
+if SplitRxSymbol == 1        % If no burst errors are specified then return recieved symbol array
+    return
+elseif M ==ErrorBurstSymbolSize     % If all burst error then return with error message
+    error('No Burst Error Added, Number of Burst Errors are too Large');
+    return
+else
+    count = 1;          % Adds and Error to every other row, then joins array back to data stream
+    for i =  1:NumberOfBurstError
+        tempArray(1:ErrorBurstSymbolSize,count)= ...
+        sqrt(No).*(((randn(1,ErrorBurstSymbolSize)+1i*randn(1,ErrorBurstSymbolSize))...
+        /sqrt(2))/sqrt(Esnorm));
+    count = count+1;
+    end
+    RxSymbol = reshape(tempArray,1,[]);
+end
+end
+

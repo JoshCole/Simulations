@@ -1,0 +1,23 @@
+function [ BlockCode ] = BlockCodeWord( Data, NumberOfGenPoly, txCRCPacketLength )
+% BlockCodeWord
+%
+% Reshapes matrix to form 
+%
+% Usage :
+%               [ inputValue, numInput, currentStates, PreviousState,
+%               Value, LogicValue, Decode, Surviver ] = NodeSetup( Decision, statesDec, numStates )
+%
+% Where         Decision = HardDecision (0,1) or SoftDecision (LLR)
+%               numStates = Number of States
+rows = txCRCPacketLength;
+rxLLRBlock = zeros(rows,NumberOfGenPoly);
+for i = 0:rows-1
+    Index = i*NumberOfGenPoly;
+    for ii = 1:NumberOfGenPoly
+    rxLLRBlock(i+1,ii) = Data(Index+ii);
+    end
+end
+BlockCode = reshape(rxLLRBlock,rows,1,NumberOfGenPoly);
+
+end
+

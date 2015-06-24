@@ -1,0 +1,19 @@
+function [ Bi ] = Bi2Dec(data, N, nBits)
+powOf2 = 2.^(0:nBits-1);
+
+Bi = false(nBits, N);
+
+cnt = nBits;
+cnt_2 = 1;
+for ii = 1:N
+    while data>0
+        if data >= powOf2(cnt)
+            data = data-powOf2(cnt);
+            Bi(cnt_2) = true;
+        end
+        cnt = cnt - 1;
+        cnt_2 = cnt_2+1;
+    end
+end
+end
+

@@ -1,0 +1,43 @@
+function [ yi ] = deRateMatching( xi, Xi, DeltaNij,  Eini , Eplus , Eminus, yi, arrayRows, Fi, testArray )
+arrayIndex = 1;
+
+if DeltaNij<0
+    E=Eini;                 % Inital error between current and desired puncturing ratio
+    m=1;                    % Index of current bit
+    tempIndex = 0;
+    while(m<=Xi)
+        E = E-Eminus;       % Update Error
+        if E<=0          % Check if bit number m should be repeared
+            yi(m,Fi+1) = 0;
+            arrayIndex = arrayIndex -1;
+            E = E+Eplus;
+        end
+        if tempIndex ~= arrayIndex
+            yi(m,Fi+1) = xi(arrayIndex);
+            tempIndex = arrayIndex;
+        end
+        arrayIndex = arrayIndex +1;
+        m = m+1;
+    end
+    
+else
+    E = Eini;               % Initial error between current and desired puncturing ratio
+    m = 1;                  % Index of current bit
+    while m <=Xi
+        E = E-Eminus;       % Update error
+        tempValue = 0;
+        while E<=0          % Check if bit number m should be repeared
+            tempValue = tempValue+xi(arrayIndex)+xi(arrayIndex+1);
+            arrayIndex = arrayIndex+1;
+            E=E+Eplus;      % Update error
+        end
+        yi(m,Fi+1) = tempValue;
+        arrayIndex = arrayIndex+1;
+        m = m+1;            % Next bit
+    end
+end
+
+
+
+end
+

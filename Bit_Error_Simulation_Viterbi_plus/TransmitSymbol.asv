@@ -1,0 +1,37 @@
+function [ RxSymbol, Noise ,No, NoiseVar ] = TransmitSymbol( TxSymbol, Es, Esnorm, EsNo_lin, FrameSize )
+% RateMatching
+%
+% This function calculates the Additive White Gaussian Noise to be induced
+% to the current signal. In addition it calcuates the associated noise
+% factors
+%
+% Usage :
+%
+% [ RxSymbol, Noise ,No, NoiseVar ] = TransmitSymbol( TxSymbol, Es, Esnorm,
+% EsNo_lin, FrameSize )
+%
+% Where         xi          = Is the current packet
+%
+%				Xi          = Is the simulated Frame length, Not the Length
+%                             of xi
+%
+%				DeltaNij	= Negative puncturing is required of size
+%                             DeltaNij for each frame. Positive repatition
+%                             is required of size DeltaNij for each frame
+%
+%				Eini		= Initial value of e in rate matching algorithm
+%							  This is different for each frame in the TTI therefore
+%							  a vector is returned with each element containing
+%							  the parameter value for each parameter.
+%
+%               Eplus       = Updateds Inital Error Error
+%               Eminus      = Updateds Inital Error Error
+%               yi          = Empty Matrix
+%               Fi          = Number of Frames
+No = (Es./EsNo_lin);
+NoiseVar = (No/2);
+AWGN = (((randn(1,FrameSize))+1i*(randn(1,FrameSize)))/(sqrt(2)))/sqrt(Esnorm);
+Noise = (sqrt(No).*AWGN);
+RxSymbol = TxSymbol + Noise;
+end
+

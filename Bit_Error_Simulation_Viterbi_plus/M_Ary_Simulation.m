@@ -1,0 +1,418 @@
+% M-Ary Simulation
+%
+% Calculates BER, SER, BLER
+%
+% Usage :
+%
+%
+% Where         M       = Number of Symbols in M-ary system, M = 1 Uncoded
+%                         QPSK. M can be a array of M-ary i.e. [2,4,16]
+%               
+%               EsNo_dB  = SNR Values under test
+%
+%               Parity  = NaN, 'gCRC8', 'gCRC16', 'gCRC24B', 'gCRC24A'
+%
+%               Decision = for Hard Decision 'HardDecision', for Soft
+%                          Decision 'SoftDecision'
+%
+%               TTI  = Transmission Time Interval, Value is an integer for
+%                      indexing array [10 ms 20 ms 40 ms 80 ms] i.e TTI = 4 for
+%                      80ms
+%
+%               ErrorBirstSymbolSize = Number of symbols replace with noise
+%
+%               NumberOfBurstError   = Number of Burst errors in transmitted
+%                                      symbol array
+%
+%               NumberOfPackets      = Number Of Packet to be sent
+%
+%               PacketSize           = Size of packet to be sent
+%
+%               Coding               = for uncoded message 'Uncoded', for coded message
+%                                      'Coded'
+%
+%               TrCHSize             = size of avaliable Transport Channel, effects
+%                                      code rate Matching for SoftDecision
+
+clear all
+close all
+% Modulation configuration
+% ------------------------
+M = [4];          
+NumM = length(M);         % Number of M-arys to be tested
+
+% Configure Test
+% --------------
+EsNo_dB(:,1) = linspace(0, 20, 20); % Noise density dB
+EsNo_lin = 10.^(EsNo_dB / 10);      % Noise density linear   
+NumEsNo = length(EsNo_lin);         % Numb of Iterations
+EsNo_dBArray = zeros(NumEsNo,NumM);
+EbNo_dBArray = zeros(NumEsNo,NumM);
+
+% Simulation configuration
+% ------------------------
+ParityArray = {'gCRC24A'};
+NumParity = length(ParityArray);
+DecisionArray = {'SoftDecision'};
+NumDecision = length(DecisionArray);
+% Decision = 'SoftDecision';
+
+TTI = 4;
+BitErrorsArray = 0;%[1,2,3,5,7,9,11];
+NumBitError = length(BitErrorsArray);
+ErrorBurstSymbolSize = 0;
+NumberOfBurstError = 0;
+PacketSizeArray = [2^8];
+NumberOfPacketsArray = 2^20./PacketSizeArray;
+NumPacketSizes = length(PacketSizeArray);
+TransmissionOverhead = zeros(NumPacketSizes, NumM, NumParity);
+
+% Coding 
+% ------
+Coding = 'Coded';
+     
+% Get Polynomial Generator Data, LLR Symbols, Packet Size
+% -------------------------------------------------------
+[ genPoly, NumberOfGenPoly, CodingRate, Memory, numStates, currentStates, statesBinary, numBranches, BranchLogic ] = GetGenPolyData;
+TrCHSize = 3*(256);     
+
+% Variation In Simulation
+% -----------------------
+VariationVariable = NumDecision;%NumPacketSizes;%NumBitError;      % Variable Intorduction of errors, variation in packet size etc
+
+% Run Simulation
+% --------------
+FigureNumber = 0;
+MBitError = zeros(NumEsNo,NumM+VariationVariable-1);
+MSymbolError = zeros(NumEsNo,NumM+VariationVariable-1);
+MBitErrorTheo = zeros(NumEsNo,NumM);
+MSymbolErrorTheo = zeros(NumEsNo,NumM);
+MBLERTheo = zeros(NumEsNo,NumM+VariationVariable-1);
+BLER_theo = zeros(NumEsNo,1);
+
+MBLER = zeros(NumEsNo,NumM+1-1);
+
+MLegendArray = cell(1,NumM+VariationVariable-1);
+MLegendSimArray = cell(1,NumM+VariationVariable-1);
+MTitleArray = cell(1,NumM+VariationVariable-1);
+for par = 0:NumParity-1
+    Parity = ParityArray{par+1};
+    for j = 0:VariationVariable-1
+        Decision = DecisionArray{j+1};
+        NumberOfPackets = NumberOfPacketsArray(1);
+        BitErrorsAdded = BitErrorsArray(1);         % Variation configuration
+        PacketSize = PacketSizeArray(1);
+        % Nodes Setup
+        % ------------
+        [ inputValue, numInput, PreviousState, Value, LogicValue, Decode ] = NodeSetup( Decision, numStates );
+        [ BranchNum, NextState ] = BranchLogicValues( numStates, inputValue, numInput, statesBinary, genPoly, NumberOfGenPoly, Memory, zeros(numStates,NumberOfGenPoly,numInput ), zeros(numStates,Memory,numInput ) );
+        [ NewPacketSize, TrCHSize,  ParitySize ] = GetPacketSize( Coding, PacketSize, TrCHSize, Parity, Memory );
+        for m = 1:NumM
+            % Get Symbol Array Data
+            % ---------------------
+            TransmissionOverhead(m,j+1,par+1)=(ParitySize/PacketSize)*100;
+            [ k, Es, Esnorm, Eb, Ebnorm, SymbolArray ] = GetSymbolArrayData( M(m) );
+            [ LLRBitArray, Logic, BitArraySize ] = LLRSymbolArray( SymbolArray, M(m), k );
+            EbNo_lin = EsNo_lin/k;
+            EbNo_dB = 10*log10(EbNo_lin);       % EbNo Scaling
+
+            % Theoretical Data
+            % ----------------
+            switch M(m)
+                case 1
+                    bit_err_theo(:,1) = (1/k)*erfc(sqrt((k/Es)*EbNo_lin));
+                    simb_error_theo(:,1) = erfc(sqrt((k/Es)*EbNo_lin));
+                case 2
+                    bit_err_theo(:,1) = (1/(2*k))*erfc(sqrt((k/Es)*EbNo_lin));
+                    simb_error_theo(:,1) = (1/2)*erfc(sqrt((k/Es)*EbNo_lin));
+                case 4
+                    bit_err_theo(:,1) = ((1/k)*erfc(sqrt((k/Es)*EbNo_lin))-(1/(4*k))*erfc(sqrt((k/Es)*EbNo_lin)).^2);
+                    simb_error_theo(:,1) = erfc(sqrt((k/Es)*EbNo_lin))-(1/4)*erfc(sqrt((k/Es)*EbNo_lin)).^2;
+                case 16
+                    bit_err_theo(:,1) = (3/8)*erfc(sqrt((k/Es)*EbNo_lin));%((3/2)*(3/16)*erfc(sqrt((k/Es)*EbNo_lin))-(9/16)*(21/64)*erfc(sqrt((k/Es)*EbNo_lin)).^2);
+                    simb_error_theo(:,1) = ((3/2)*erfc(sqrt((k/Es)*EbNo_lin))-(9/16)*erfc(sqrt((k/Es)*EbNo_lin)).^2);
+            end
+            MBitErrorTheo(:,m) = bit_err_theo;
+            MSymbolErrorTheo(:,m) = simb_error_theo;
+            BitError = zeros(1,NumEsNo);
+            SymbolError = zeros(1,NumEsNo);
+            CRCER = zeros(1,NumEsNo);
+
+            for i = 1:NumEsNo
+                BitErrorPacket = zeros(1,NumberOfPackets);
+                SymbolErrorPacket = zeros(1,NumberOfPackets);
+                totalCRCErrors = zeros(1,NumberOfPackets);
+                PacketErrorStop = 0;
+                PacketCount = 0;
+                for ii = 1:NumberOfPackets 
+                    TxPacket = double(rand(1,NewPacketSize) > 0.5);
+                    [TxPacket, TxPacketLength] = GetCRC('Transmitter', TxPacket, Parity);
+                    TxPacketLength = TxPacketLength+Memory;
+                    TxPacket = AddBitErrorSizem( TxPacket, BitErrorsAdded );
+                    xi = EncodePacket( TxPacket, genPoly, NumberOfGenPoly, Memory, Coding );
+                    [ yi, Xi, Yi ] = Interleaver1st( xi, TTI );
+                    [ yi, DeltaNij , Nij , Fi, TrCHArray ] = GetTrCHParameters( yi, TrCHSize );
+                    [ Eini , Eplus , Eminus, DeltaNi ] = GetRateMatchParametersNonTurbo ( DeltaNij , Nij , Fi );
+                    [ TxBits ] = RateMatching( yi, Yi, DeltaNij,  Eini , Eplus , Eminus, TrCHArray, Fi );
+                    [ TxSymbolIdx, TrCHFrameSize ] = SymbolIndex( TxBits, k );
+
+                    % Modulation, Transmit over Medium, Add Burst Error, Compute LLR
+                    % --------------------------------------------------------------
+                    [ TxSymbol ] = SymbolArray(TxSymbolIdx);    % Gets Symbols to be Transmitted for Symbol Array
+                    [ RxSymbol, Noise , No, NoiseVar ] = TransmitSymbol( TxSymbol, Es, Esnorm, EsNo_lin(i), TrCHFrameSize );
+                    [ RxSymbol ] = AddBurstError( RxSymbol, Esnorm, No, ErrorBurstSymbolSize, NumberOfBurstError );
+                    [ LLRData ] = LLR( LLRBitArray, RxSymbol, k, NoiseVar );
+
+                    % Soft or Hard Decision
+                    % ---------------------
+                    [RxSoftDecision, RxHardDecision] = DecisionType( LLRData, k, TrCHFrameSize );
+                    Ni = Nij;  % Original Number of bits Per Frame
+                     switch Decision
+                         case 'HardDecision'
+                             RxMessage = RxHardDecision;
+                         case 'SoftDecision'
+                             [ RxMessage ] = DeRateMatching( RxSoftDecision, Yi, DeltaNij,  Eini , Eplus , Eminus, zeros(Ni,Fi), Fi );
+                     end
+
+                    % DeInterLeaver
+                    % -------------
+                    [ RxMessage ] = DeInterleaver1st( RxMessage, Fi, Ni , TTI );
+
+                    if strcmp(Coding,'Coded')
+                        [ BlockCode ] = BlockCodeWord( RxMessage, NumberOfGenPoly,  TxPacketLength );
+
+                        [ BMetric, BlockCode ] = BranchMetric( Decision, BlockCode, BranchLogic, numBranches, NumberOfGenPoly,TxPacketLength );
+
+                        % Initialise Node
+                        % --------------
+                        Stages  = TxPacketLength+1;
+                        TrellisValue = repmat(Value,1,Stages);
+                        TrellisPreviousState = repmat(PreviousState,1,Stages);
+                        TrellisDecode = repmat(Decode,1,Stages);
+                        TrellisValue(1,1) = 0;
+
+                        % Taverse Trellis Map
+                        % -------------------
+                        [ TrellisValue, TrellisPreviousState ,TrellisDecode ] = TrellisMap( Decision, BMetric , BranchNum, BlockCode, NextState, TrellisValue, TrellisPreviousState, TrellisDecode, currentStates, Stages, numStates ,numInput );
+                        [ RxMessage] = DecodePacket( Decision, TrellisValue, TrellisPreviousState ,TrellisDecode, Stages,BranchNum , TxPacket );
+                    end
+                    % Check For Errors
+                    % ----------------
+                    [ RxSymbolIdx, RxTrCHFrameSize ] = SymbolIndex( RxHardDecision, k );
+                    BitErrorPacket(ii) = mean(RxHardDecision(:) ~= TxBits(:));
+                    SymbolErrorPacket(ii) = mean(RxSymbolIdx(:) ~= TxSymbolIdx(:));
+                    if ~isnan(Parity)
+                        [ DecodedMessage, crcError ] = GetCRC('Reciever', RxMessage, Parity);
+                        totalCRCErrors(ii) = crcError;
+                    elseif BitErrorPacket(ii)>0
+                        totalCRCErrors(ii) = 1;
+                    end
+                    % Stop current test if enough packet errors have occured
+                    % ------------------------------------------------------
+                    PacketErrorStop = PacketErrorStop + totalCRCErrors(ii);
+                    PacketCount = PacketCount+1;
+                    if PacketErrorStop >50
+                        break
+                    end 
+                end
+                CRCERTotal(1,i)= sum(totalCRCErrors);
+                CRCER(1,i) = sum(totalCRCErrors)/PacketCount;
+                BitError(1,i) = sum(BitErrorPacket)/PacketCount;
+                SymbolError(1,i) = sum(SymbolErrorPacket)/PacketCount;
+            end
+            MBitError(:,m) = BitError(1,:);
+            MSymbolError(:,m) = SymbolError(1,:);
+            MBLER(:,m+j)= CRCER(1,:);
+            MCRCERTotal(:,m)= CRCERTotal(1,:);
+            % Determine Theoretical Block Error Rates
+            % ---------------------------------------
+            N = TxPacketLength;
+            BLER_theo(:,1)  = (1-(1-bit_err_theo).^N);
+            MBLERTheo(:,m+j)= BLER_theo(:,1);
+
+            % Print Relevent Data For Simulation
+            % ----------------------------------
+            disp('M-Ary Simulation');
+            switch M(m)
+                case 1
+                    disp('QPSK');
+                    MLegend = 'QPSK Theory';
+                    MLegendSim = 'QPSK Simulated';
+                    MTitle = 'Block error probability curve for QPSK modulation';
+                case 2
+                    disp('BPSK');
+                    MLegend = 'BPSK Theory';
+                    MLegendSim = 'BPSK Simulated';
+                    MTitle = ('Block error probability curve for BPSK modulation');
+                case 4
+                    disp('QPSK Gray Code');
+                    MLegend = 'QPSK Theory';
+                    MLegendSim = 'Gray Coded QPSK Simulated';
+                    MTitle = ('Block error probability curve for Gray Coded QPSK modulation');
+                case 16
+                    disp('16-QAM');
+                    MLegend = '16-QAM Theory';
+                    MLegendSim = '16-QAM Simulated';
+                    MTitle = 'Block error probability curve for Gray Coded 16-QAM modulation';
+            end
+            if j == 0
+                MLegendArray{m+j} = MLegend;
+                MLegendSimArray{m+j} =  MLegendSim;
+                MTitleArray{m+j} = MTitle;
+            end
+            Packet = ['Number Of Packets: ', num2str(NumberOfPackets)];
+            disp(Packet);
+            PacketBits = ['Number Of Bits Per Packet: ', num2str(PacketSize)];
+            disp(PacketBits);
+            TotalNumOfBits = ['Total Number Of Bits: ', num2str(PacketSize*NumberOfPackets)];
+            disp(TotalNumOfBits);
+            c = ['Coding Rate: ', num2str(rats(CodingRate))];
+            disp(c);
+            if TrCHSize <Xi
+                RateMatch = ['Coding Rate reduced to: ', num2str(rats(TxPacketLength/PacketSize))];
+                disp('Rate Matching');
+                disp(RateMatch);
+            elseif TrCHSize>Xi
+                RateMatch = ['Coding Rate increased to: ', num2str(rats(TxPacketLength/TrCHSize))];
+                disp('Rate Matching');
+                disp(RateMatch);
+            end
+
+            % Plot Results
+            % ------------
+        %     figure(FigureNumber+1)
+        %     plot(SymbolArray,'b.')
+        %     title('Symbol Array');
+        %     xlabel('I');
+        %     ylabel('Q');
+        % 
+%             figure(FigureNumber+1)
+%             semilogy(EsNo_dB,simb_error_theo,'m');
+%             hold on
+%             semilogy(EsNo_dB,SymbolError,'m:o');
+%             semilogy(EsNo_dB,BLER_theo,'b');
+%             semilogy(EsNo_dB,CRCER,'b:o');
+%             grid on
+% 
+%             title(MTitle);
+%             legend('Symbol Error Theory', 'Symbol Error', 'BLER Theory', 'BLER Simulated');
+%             xlabel('Es/No, dB');
+%             ylabel('Symbol Error Rate');
+    
+            EsNo_dBArray(:,m+j) = EsNo_dB;
+            EbNo_dBArray(:,m+j) = EbNo_dB;
+            
+%             figure(FigureNumber+2)
+%             semilogy(EbNo_dB,bit_err_theo,'m');
+%             hold on
+%             semilogy(EbNo_dB,BitError,'m:o');
+%             semilogy(EbNo_dB,BLER_theo,'b');
+%             semilogy(EbNo_dB,CRCER,'b:o');
+%             grid on
+    % 
+    %         title(MTitle);
+    %         legend('Bit Error Theory', 'Bit Error', 'BLER Theory', 'BLER Simulated');
+    %         xlabel('Eb/No, dB');
+    %         ylabel('Bit Error Rate');
+
+        %     figure(FigureNumber+4)
+        %     gaindB = BitError./CRCER;
+        %     plot(EsNo_dB,gaindB,'b.-');
+        %     grid on
+        % 
+        %     legend('Coding Gain dB');
+        %     xlabel('Es/No, dB');
+        %     ylabel('Gain');
+
+            NumberofFigures = 1;  
+            FigureNumber = FigureNumber + NumberofFigures;
+        end
+        DArray{j+1} = MBLER;
+    end
+    
+end
+NewLeg = [MLegendArray,MLegendSimArray];
+    figure
+for i = 1:2
+    MBLER = DArray{i};
+    hold on
+    semilogy(EbNo_dBArray,MBLERTheo,'r');
+    semilogy(EbNo_dBArray,MBLER,':*');
+    % semilogy(EbNo_dBArray,MBitError,':o');
+
+    grid on
+    % legend(NewLeg);
+    xlabel('Eb/No, dB');
+    ylabel('Block Error Rate');
+end
+% 
+% figure(FigureNumber+3)
+% hold on
+% semilogy(EsNo_dBArray,MBLERTheo);
+% % semilogy(EsNo_dBArray,MBLER,':*');
+% semilogy(EsNo_dBArray,MSymbolError,':o');
+% grid on
+% % legend(NewLeg);
+% xlabel('Es/No, dB');
+% ylabel('Symbol Error Rate');
+% figure(FigureNumber+1)
+% hold on
+% semilogy(EbNo_dBArray,MBitErrorTheo);
+% semilogy(EbNo_dBArray,MBitError,':o');
+% grid on
+% legend(NewLeg);
+% xlabel('Eb/No, dB');
+% ylabel('Block Error Rate');
+% 
+% figure(FigureNumber+2)
+% hold on
+% semilogy(EsNo_dBArray,MSymbolErrorTheo);
+% semilogy(EsNo_dBArray,MSymbolError,':o');
+% grid on
+% legend(NewLeg);
+% xlabel('Es/No, dB');
+% ylabel('Symbol Error Rate');
+        
+%     figure(FigureNumber+1)
+%     hold on
+%     semilogy(EbNo_dB,MBLERTheo);
+%     semilogy(EbNo_dBArray,MBLER,':o');
+%     grid on
+%     legend(NewLeg);
+%     xlabel('Eb/No, dB');
+%     ylabel('Block Error Rate');
+    
+%         figure(FigureNumber+2)
+%         gaindB = MBLERTheo./MBLER;
+%         plot(MBLER,gaindB);
+%         grid on
+%     
+%         legend('Coding Gain dB');
+%         xlabel('Es/No, dB');
+%         ylabel('Gain');
+%     
+%     figure(FigureNumber+3)
+%     
+%     semilogy(EbNo_dB,MBitErrorTheo);
+%    
+%     hold on
+%     semilogy(EbNo_dBArray,MBLERTheo);
+%     semilogy(EbNo_dBArray,MBLER,':o');
+%     grid on
+% 
+%     title('Symbol Error Probability Curve');
+%     legend( NewLeg);
+%     xlabel('Eb/No, dB');
+%     ylabel('Block Error Rate');
+    
+%         figure(FigureNumber+3)
+% %     semilogy(EsNo_dBArray,MBLERTheo);
+%     hold on
+%     plot(PacketSizeArray,TransmissionOverhead,'-o');
+%     grid on
+% 
+%     title('Symbol Error Probability Curve');
+% %     legend( NewLeg);
+%     xlabel('Packet Size');
+%     ylabel('Transmission Overhead (%)');
+    

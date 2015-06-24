@@ -1,0 +1,9 @@
+function [ strucStages, inputValue, numInput, currentStates ] = InitialiseNodes( numStates, statesBinary, statesDec, genPoly, NumberOfGenPoly, Memory )
+
+% hammDistance = zeros(numStates,numInput,stages-1 );
+
+% strucStages = repmat(strucStages,1,stages);
+
+
+end
+

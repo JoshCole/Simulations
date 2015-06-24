@@ -1,0 +1,49 @@
+% For QPSK 2 system
+clear all
+close all
+
+M = 16;
+k = log2(M); % bits per symbol
+
+% Number of symbols in simulation
+N = 1e3;
+
+% energy per symbol
+Es = 1;
+
+% Energy per bit
+Eb = Es / k;
+
+% Define AWGN
+AWGN = ((randn(1,N))+1i*(randn(1,N)))/sqrt(2);
+
+% Energy per bit to noise power spectral density ratio (Eb/No)
+% Eb/No values to simulate at, in dB
+% LINSPACE(X1, X2, N) generates N points between X1 and X2
+EbNo_dB = linspace(0, 10, 11);
+
+% Eb/No values in linear scale
+EbNo_lin = 10.^(EbNo_dB / 10);
+
+%Symbol definition
+%symbArray =[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
+%symbArray
+%=[0000,0001,0011,0010,0110,0111,0101,0100,1100,1101,1111,1101,1010,1011,1001,1000];
+symbArray =[1+1i,1+3i,3+1i,3+3i,1-3i,1-1i,3-3i,3-1i,-3+1i,-3+3i,-1+1i,-1+3i,-3-3i,-3-1i,-1-3i,-1-1i];
+
+%Modulation
+% Random bit array for transmittion
+txBits = reshape((randn(N*k,1) > 0.5),k,[]);
+
+% Convert bits to Decimal
+idx = 8*txBits(1,:) + 4*txBits(2,:) + 2*txBits(3,:) + txBits(4,:);
+% From look up table determine symbol to be transmitted
+txSymb = symbArray(idx+1);
+
+% Define Arrays
+bit_err = zeros(size(EbNo_lin));
+decIndex = zeros(1,N);
+rxBits = zeros(2,N);
+rxSymb = zeros(length(EbNo_lin),N);
+diffAll = zeros(length(symbArray),N);
+diffMin = zeros(length(EbNo_lin),N);
