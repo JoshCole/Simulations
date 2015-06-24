@@ -1,0 +1,70 @@
+close all
+clear all
+% Number of Transmit Antenna's
+NTx = 2;
+% Number of Recieve Antenna's
+NRx = 1;
+
+% Configure Test
+% --------------
+EsNo_dB(:,1) = linspace(35, 0, 10); % Noise density dB
+EsNo_lin = 10.^(EsNo_dB / 10);      % Noise density linear   
+NumEsNo = length(EsNo_lin);         % Numb of Iterations
+
+% Constellation
+M = 2;
+N = 100;
+NumberOfPackets = 10^6;
+[ k, Es, Esnorm, Eb, Ebnorm, SymbolArray ] = GetSymbolArrayData( M );
+[ LLRBitArray, Logic, BitArraySize ] = LLRSymbolArray( SymbolArray, M, k );
+EbNo_lin = EsNo_lin/k;
+EbNo_dB = 10*log10(EbNo_lin);       % EbNo Scaling
+
+for i = 1:NumEsNo
+    for ii = 1:NumberOfPackets
+        % Generate equally likely binary values
+        txBits = rand(1,N) > 0.5;
+        % Symbol idx for symbol array
+        [ TxSymbolIdx, TrCHFrameSize ] = SymbolIndex( txBits, k );
+        % Symbols
+        [ sn ] = SymbolArray(TxSymbolIdx); 
+        s=reshape(sn,2,length(sn)/2);
+%         
+        % Channel 
+        % ------- 
+        x = randn(1, 2); y = randn(1, 2); % Random Variables X and Y with Gaussian Distribution mean zero variance one
+        h =(x + 1i.*y)/sqrt(2);                   % Normalised Ralyiegh random Variable
+        H = [h(1) h(2); conj(h(2)) -conj(h(1))];
+        
+        % Effects of Channel
+        Hs = H*s;
+        
+        % AWGN
+        No = (Es./EsNo_lin(i));    % Noise Spectral Density
+        NoiseVar = No;             % Noise Variance
+        n = sqrt(No)*(randn(NTx,length(Hs))+1i*randn(NTx,length(Hs)))*(1/sqrt(2));     % Normalised AWGN in respect to Esnorm
+        n(2,:) = conj(n(2,:));
+        % Receiver
+        y = Hs+n; 
+        
+        HMod = pinv(H);
+        sHat = HMod*y; 
+        sHat = reshape(sHat,1,N);
+        
+        LLRData  = LLR( LLRBitArray, sHat, k, NoiseVar );
+        [RxSoftDecision, RxHardDecision] = DecisionType( LLRData, k, N );
+        [ RxSymbolIdx, TrCHFrameSize ] = SymbolIndex( RxHardDecision, k );
+        [ rxsn ] = SymbolArray(RxSymbolIdx); 
+%         figure
+%         plot(real(sHat),'o') 
+        BitErrorPacket(ii) = mean(txBits(:) ~= RxHardDecision(:));
+        SymbolErrorPacket(ii) = mean(sn(:) ~= rxsn(:));
+    end
+        BitError(i) = sum(BitErrorPacket)/NumberOfPackets;
+        SymbolError(i) = sum(SymbolErrorPacket)/NumberOfPackets;
+end
+figure
+semilogy(EbNo_dB,BitError)
+         grid on
+         xlabel('EbNo dB')
+         ylabel('BER')

@@ -1,0 +1,266 @@
+clear all
+close all
+% Modulation Scheme
+Bandwith = 4.5e6;
+deltaF = 15e3;
+Nfft = 512;
+T = 1/deltaF;
+Ts = T/Nfft;
+Nsubcarriers = 300;
+TimeSample = (0:Nsubcarriers-1)*Ts;
+OverSampleRate = Nfft/Nsubcarriers;
+% n = -Nsubcarriers/2:1:Nsubcarriers/2;
+% n(n==0) =[];
+% k = 0:Nsubcarriers-1;
+% Tk = Ts*k;
+SubCarrierIndex = [-Nsubcarriers/2:-1 1: Nsubcarriers/2];
+fs = Bandwith/(Nsubcarriers-1);
+% T =0:fs:Bandwith;
+f = 0:fs:Bandwith; 
+temp = fs(end);
+M = [4];
+TransmitTime = 10e-3;
+NumberOfPackets = TransmitTime/T;
+NumM = length(M);         % Number of M-arys to be tested
+
+
+ZeroPadding = zeros(1,(Nfft - Nsubcarriers)/2);
+
+% Configure Test
+% --------------
+EsNo_dB(:,1) = linspace(35, 0, 20); % Noise density dB
+EsNo_lin = 10.^(EsNo_dB / 10);      % Noise density linear   
+NumEsNo = length(EsNo_lin);         % Numb of Iterations
+EsNo_dBArray = zeros(NumEsNo,NumM);
+EbNo_dBArray = zeros(NumEsNo,NumM);
+Rxst = [];
+OFDMSymbol = zeros(1,Nfft);
+Ncp = 36;
+for m = 1:NumM
+    [ k, Es, Esnorm, Eb, Ebnorm, SymbolArray ] = GetSymbolArrayData( M(m) );
+%     NBitsPerSymbol = Nsubcarriers/k;
+%     for i = 1:NumEsNo
+        for ii = 1:NumberOfPackets
+            TxPacket = double(rand(1,Nsubcarriers*k) > 0.5);
+            [ TxSymbolIdx, TrCHFrameSize ] = SymbolIndex( TxPacket, k );
+            [ TxSymbol ] = SymbolArray(TxSymbolIdx); 
+            OFDMSymbol(SubCarrierIndex+Nfft/2+1) = TxSymbol;
+%             OFDMSymbol = [ZeroPadding TxSymbol ZeroPadding];
+            outputIDFT = ifft(OFDMSymbol,Nfft);
+            CyclicPrefix = outputIDFT((Nfft-Ncp)+1:Nfft);
+            outputIDFT_CP = [CyclicPrefix outputIDFT];
+            % Channel
+            % ------- 
+            DelayArray = [1 18 36 37]+1;
+            DelayTerms = length(DelayArray);
+            testArray = zeros(Nfft,DelayTerms);
+            for d = 1:DelayTerms
+                ChannelSize = 40;
+                Taps = 1;
+                x = randn(1, Taps); y = randn(1, Taps); % Random Variables X and Y with Gaussian Distribution mean zero variance one
+                rayleighFade = 1;%(x + 1i.*y)/sqrt(2);       % Normalised Ralyiegh random Variable
+                Delay = DelayArray(d);
+%                 Delay = 36;%randi(ChannelSize,1,Taps); % Shifted by one
+%                 OFDM symbol
+                h = zeros(1,ChannelSize);
+                h(Delay) = rayleighFade; % Delay Unit Power
+
+                DelayedSymbol = conv(outputIDFT_CP,h);
+                % Reciever
+                % --------
+                SampledSymbol = DelayedSymbol(Ncp+1:Ncp+Nfft);
+                testArray(:,d)= SampledSymbol.';
+            end
+            f = 7.68;
+            subplot(4,1,1)
+            F = -f/2:f/(Nfft-1):f/2;
+            plot(F,20*log10((abs(fft(testArray(:,1),Nfft)))));
+            set(gca, 'FontSize',14); 
+            title('FFT, OFDM Symbol')
+            xlabel('Frequency (MHz)', 'FontSize',14);
+            ylabel('Magnitude dB', 'FontSize',14);
+%             axis([-f/2 f/2 -40 10])
+            
+            subplot(4,1,2)
+            F = -f/2:f/(Nfft-1):f/2;
+            plot(F,20*log10((abs(fft(testArray(:,2),Nfft)))));
+            set(gca, 'FontSize',14); 
+            title('FFT, OFDM Symbol')
+            xlabel('Frequency (MHz)', 'FontSize',14);
+            ylabel('Magnitude dB', 'FontSize',14);
+%             axis([-f/2 f/2 -40 10])
+            
+            subplot(4,1,3)
+            F = -f/2:f/(Nfft-1):f/2;
+            plot(F,20*log10((abs(fft(testArray(:,3),Nfft)))));
+            set(gca, 'FontSize',14); 
+            title('FFT, OFDM Symbol')
+            xlabel('Frequency (MHz)', 'FontSize',14);
+            ylabel('Magnitude dB', 'FontSize',14);
+%             axis([-f/2 f/2 -40 10])
+            
+            subplot(4,1,4)
+            F = -f/2:f/(Nfft-1):f/2;
+            plot(F,20*log10((abs(fft(testArray(:,4),Nfft)))));
+            set(gca, 'FontSize',14); 
+            title('FFT, OFDM Symbol')
+            xlabel('Frequency (MHz)', 'FontSize',14);
+            ylabel('Magnitude dB', 'FontSize',14);
+%             axis([-f/2 f/2 -40 10])
+
+            figure
+            subplot(4,1,1)
+            plot(fft(testArray(:,1),Nfft),'or')
+            set(gca, 'FontSize',14); 
+            title('Channel Delayed Constellation Diagram')
+            xlabel('I', 'FontSize',14);
+            ylabel('Q', 'FontSize',14);
+            axis([-1 1 -1 1])
+            
+            subplot(4,1,2)
+            plot(fft(testArray(:,2),Nfft),'or')
+            set(gca, 'FontSize',14); 
+            title('Channel Delayed Constellation Diagram')
+            xlabel('I', 'FontSize',14);
+            ylabel('Q', 'FontSize',14);
+            axis([-1 1 -1 1])
+            
+            subplot(4,1,3)
+            plot(fft(testArray(:,3),Nfft),'or')
+            set(gca, 'FontSize',14); 
+            title('Channel Delayed Constellation Diagram')
+            xlabel('I', 'FontSize',14);
+            ylabel('Q', 'FontSize',14);
+            axis([-1 1 -1 1])
+            
+            subplot(4,1,4)
+            plot(fft(testArray(:,4),Nfft),'or')
+            set(gca, 'FontSize',14); 
+            title('Channel Delayed Constellation Diagram')
+            xlabel('I', 'FontSize',14);
+            ylabel('Q', 'FontSize',14);
+            axis([-1 1 -1 1])
+            
+            figure
+            subplot(2,1,1)
+            plot(20*log10abs(fft(testArray(:,3),Nfft)))
+            subplot(2,1,2)
+            plot(20*log10(abs(fft(testArray(:,4),Nfft))),'r')
+            Rxst = [Rxst SampledSymbol];
+        end
+%     end
+    NfftArray = [2^9];
+    x=Rxst.';
+    M = length(x);
+    Fs = 1;%15e3*OverSampleRate;
+    for j = 1:length(NfftArray)
+        Nfft = NfftArray(j);
+
+        % Hanning Window
+        % -------------- 
+        [ win ] = Hanning( Nfft );  
+        Ls = length(win);
+
+        noverlap = fix(0.5.*Ls);
+
+        k = (M-noverlap)./(Ls-noverlap);
+        k = fix(k);
+
+        % Define Overlap  
+        % --------------
+        LminusOverlap = Ls-noverlap;
+        xStart = 1:LminusOverlap:k*LminusOverlap;
+        xEnd   = xStart+Ls-1;
+
+        Sxx = zeros(Nfft,1);                    % Power Spectrum Density accumulator
+        WindowEnergy = sum(abs(win).^2);        % Compensates for the power of the window, DC gain of window function
+        coherentPowerGain = sum(abs(win)).^2;
+        [ Normx, ux, Ex, Px, XRMS, simga2, DCGain, PowerGain ] = SignalInfo( win );
+        for jj = 1:k,
+            xk = x(xStart(jj):xEnd(jj));
+            xw = xk.*win;
+            Xx = fft(xw,Nfft); 
+            P = Xx.*conj(Xx)/Px;                % Auto spectrum.
+            Sxx = Sxx + P;                      % Sum scaled periodograms
+        end
+        Sxx = Sxx./k;                           % Average the sum of the periodogram
+        Pxx = Sxx./Fs;                          % Scale by the sampling frequency to obtain the psd
+
+        MeanPxx = mean(Pxx); 
+        figure
+
+        HF = fft(x,length(x));
+         f = 7.68;
+        subplot(3,1,1);
+        F = -f/2:f/(length(HF)-1):f/2;
+        plot(F,20*log10((abs(HF))));
+        axis([-f/2 f/2 -40 40])
+        set(gca, 'FontSize',14); 
+        title('FFT, One Frame (10ms)')
+        xlabel('Frequency (MHz)', 'FontSize',14);
+        ylabel('Magnitude dB', 'FontSize',14);
+
+        subplot(3,1,2);
+        F = -f/2:f/(length(Pxx)-1):f/2;
+        plot(F,20*log10(abs((Pxx))))
+        axis([-f/2 f/2 -80 10])
+        set(gca, 'FontSize',14); 
+        title(['Welch Power Spectrum Estimate = ','  Overlap Percentage = 50%','  NFFT = ',num2str(Nfft)]);
+        xlabel('Frequency (MHz)', 'FontSize',14);
+        ylabel('Magnitude dB', 'FontSize',14);
+        
+        subplot(3,1,3); 
+        
+        F = -f/2:f/(Nfft-1):f/2;
+        plot(F,20*log10((abs(fft(SampledSymbol,Nfft)))));
+        set(gca, 'FontSize',14); 
+        title('FFT, OFDM Symbol')
+        xlabel('Frequency (MHz)', 'FontSize',14);
+        ylabel('Magnitude dB', 'FontSize',14);
+        axis([-f/2 f/2 -400 10])
+        hold off
+    end
+end
+% figure
+% Ts_us = Ts*1e6;
+% T_us = T*1e6;
+% t = 0:(T*1e6)/length(DelayedSymbol):T_us;
+% t = t(1:end-1);
+% plot(t,real(DelayedSymbol))
+% set(gca, 'FontSize',14); 
+% title('OFDM Symbol')
+% xlabel('Time (us)', 'FontSize',14);
+% ylabel('Amplitude', 'FontSize',14);
+% axis([0 t(end) min(outputIDFT) max(outputIDFT)])
+% 
+% figure
+% Ts = T/Nfft;
+% Ts_us = Ts*1e6;
+% T_us = T*1e6;
+% t = 0:(T*1e6)/length(x):T_us;
+% t = t(1:end-1);
+% plot(t,real(x))
+% set(gca, 'FontSize',14); 
+% title('One Frame (10ms)')
+% xlabel('Time (us)', 'FontSize',14);
+% ylabel('Amplitude', 'FontSize',14);
+% axis([0 t(end)*150 min(x) max(x)])
+
+figure
+subplot(2,1,1)
+plot(fft(outputIDFT,Nfft),'o')
+set(gca, 'FontSize',14); 
+title('QPSK Constellation Diagram For OFDM')
+xlabel('I', 'FontSize',14);
+ylabel('Q', 'FontSize',14);
+subplot(2,1,2)
+test = fft(SampledSymbol,Nfft);
+test2=test(107:407);
+test2(151)=[];
+
+plot(test,'or')
+set(gca, 'FontSize',14); 
+title('Channel Delayed Constellation Diagram')
+xlabel('I', 'FontSize',14);
+ylabel('Q', 'FontSize',14);
+axis([-1 1 -1 1])

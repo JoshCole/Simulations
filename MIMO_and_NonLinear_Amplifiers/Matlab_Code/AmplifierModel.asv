@@ -1,0 +1,22 @@
+function [ AM_AM, AM_PM, CW ] = AmplifierModel( MUx,backoff )
+% PA Characteristics
+AlphaA = 1;
+BetaA = 1;
+AlphaPhi = pi/48;
+BetaPhi = 0.5;
+p=3;
+n = length(Mux);
+y = zeros(1,n)*(1.0+1i); % initialize output array
+
+absMUx = abs(MUx);
+Bk = 10^(backoff/20);
+for k =1:n
+    x = Bk*absMUx(k);
+    AM_AM(k) = (AlphaA.*x)./(1+(BetaA.*x).^2*p).^(1/(2*p));
+    AM_PM(k) = (AlphaPhi.*absMUx.^2)./(1+BetaPhi.*absMUx.^2);  %change in Phase
+end
+
+phaseMUx = angle(MUx);
+CW = AM_AM.*exp(1i*(phaseMUx+AM_PM));
+end
+

@@ -1,0 +1,422 @@
+function [ data ] = bySector( model )
+% Minimum Coupling Losses
+
+f = model.config.propagationFreq; % propagation model frequency
+N = model.config.NumCells;
+sigma = model.config.logStandardDev;
+R=model.sector_info.MaxRadius;
+NumSector = model.config.sector_size;
+Nsector = model.config.NumSectors;
+UEinitalTotal = model.config.Num_UE;
+model.config.idxAvailable = cell(1,Nsector);
+model.config.idxSize = zeros(1,Nsector);
+
+urbanTimesFactor = 40*(1-4*10^-3*model.bs.Dhb);
+urbanMinusFactor = -18*log10(model.bs.Dhb)+21*log10(f/1e6)+80;
+
+model.ue.ueNoisePwr_dB = -174 + 10*log10(model.config.BW) + model.ue.NFue;
+model.ue.data.angle = zeros(UEinitalTotal,N);
+model.ue.data.bs_ue_sep = zeros(UEinitalTotal,Nsector);
+model.ue.data.pathloss = zeros(UEinitalTotal,Nsector);
+model.ue.data.all_rx_pwr_dB = zeros(UEinitalTotal,Nsector);
+model.ue.data.Ppusch = zeros(UEinitalTotal,Nsector);
+model.ue.data.rx_pwr_dB = zeros(UEinitalTotal,1);
+model.ue.data.interference = zeros(UEinitalTotal,1);
+model.ue.data.snir = zeros(UEinitalTotal,1);
+model.ue.data.mcl = zeros(UEinitalTotal,1);
+model.ue.data.sc_ue_sep = zeros(UEinitalTotal,Nsector);
+model.ue.data.measuredCL =  zeros(UEinitalTotal,Nsector);
+model.ue.sectorAssign = zeros(UEinitalTotal,4);
+model.ue.cellAssign = zeros(UEinitalTotal,2);
+model.ue.data.coord = zeros(UEinitalTotal,2);
+
+model.bs.enbNoisePwr_dB = -174 + 10*log10(model.config.NumRb*375e3) + model.bs.NFbs;
+model.bs.data.rx_pwr_dB = zeros(UEinitalTotal,1);
+model.bs.data.all_rx_pwr_dB = zeros(UEinitalTotal,Nsector);
+model.bs.data.g_tx = zeros(UEinitalTotal,Nsector);
+
+model.config.NumSecidx = 1:Nsector;
+model.config.sectorID = [1:57; repmat(1:3,1,19);reshape(reshape(repmat(1:N,1,NumSector),N,NumSector)',1,Nsector)];
+model.config.loaded = zeros(Nsector,1);
+model.config.UEc = 1;
+model.config.UEt = UEinitalTotal;
+
+if model.config.reuse == 3;
+    model.config.reuseidx = [1 == model.config.sectorID(2,:);2 == model.config.sectorID(2,:);3 == model.config.sectorID(2,:)];
+else
+    model.config.reuseidx = repmat(model.config.sectorID(1,:),NumSector,1);
+end
+
+model.ue.NoisePwr_lin = 10^(model.ue.ueNoisePwr_dB/10);
+model.bs.NoisePwr_lin = 10^(model.bs.enbNoisePwr_dB/10);
+model.ue.POpusch = model.bs.enbNoisePwr_dB+model.config.pwrMargin+23; %dBm
+
+L = zeros(UEinitalTotal,Nsector);
+Log_fad = zeros(UEinitalTotal,Nsector);
+tmp_rxPwr = zeros(UEinitalTotal,Nsector);
+padsize = 0;
+
+while (sum(model.config.loaded)~=Nsector)
+    r = R*sqrt(rand(UEinitalTotal,1)); % and theta as before:
+    theta=2*pi*rand(UEinitalTotal,1);  % convert to cartesian
+    x=r.*cos(theta);
+    y=r.*sin(theta);
+
+    model.ue.data.coord              = padarray(model.ue.data.coord,padsize,'post');
+    model.ue.cellAssign              = padarray(model.ue.cellAssign,padsize,'post');
+    model.ue.sectorAssign            = padarray(model.ue.sectorAssign,padsize,'post');
+    model.ue.data.bs_ue_sep          = padarray(model.ue.data.bs_ue_sep,padsize,'post');
+    model.ue.data.sc_ue_sep          = padarray(model.ue.data.sc_ue_sep,padsize,'post');
+    model.ue.data.angle              = padarray(model.ue.data.angle,padsize,'post');
+    model.bs.data.g_tx               = padarray(model.bs.data.g_tx,padsize,'post');
+    L                                = padarray(L,padsize,'post');
+    Log_fad                          = padarray(Log_fad,padsize,'post');
+    model.ue.data.pathloss           = padarray(model.ue.data.pathloss,padsize,'post');
+    model.ue.data.all_rx_pwr_dB      = padarray(model.ue.data.all_rx_pwr_dB,padsize,'post');
+    model.bs.data.all_rx_pwr_dB      = padarray(model.bs.data.all_rx_pwr_dB,padsize,'post');
+    model.ue.data.Ppusch             = padarray(model.ue.data.Ppusch,padsize,'post');
+    model.ue.data.rx_pwr_dB          = padarray(model.ue.data.rx_pwr_dB,padsize,'post');
+    model.bs.data.rx_pwr_dB          = padarray(model.bs.data.rx_pwr_dB,padsize,'post');
+    model.ue.data.interference       = padarray(model.ue.data.interference,padsize,'post');
+    model.ue.data.snir               = padarray(model.ue.data.snir,padsize,'post');
+    model.ue.data.measuredCL         = padarray(model.ue.data.measuredCL,padsize,'post');
+    model.ue.data.mcl                = padarray(model.ue.data.mcl,padsize,'post');
+    tmp_rxPwr                        = padarray(tmp_rxPwr,padsize,'post');
+    
+    angle_ue = zeros(UEinitalTotal,N);
+
+    model.ue.data.coord(model.config.UEc:model.config.UEt,:) = [x y];
+%     AC = pdist2(model.ue.data.coord(model.config.UEc:model.config.UEt,:),model.bs.position,'euclidean')./1e3; % euclidean distance
+    AC = sqrt((repmat(model.ue.data.coord(model.config.UEc:model.config.UEt,1),1,19)- repmat(model.bs.position(:,1)',model.config.UEt,1)).^2....
+        +(repmat(model.ue.data.coord(model.config.UEc:model.config.UEt,2),1,19)- repmat(model.bs.position(:,2)',model.config.UEt,1)).^2)./1e3;
+    
+    model.ue.data.bs_ue_sep(model.config.UEc:model.config.UEt,:) = reshape(repmat(AC,NumSector,1),UEinitalTotal,Nsector);
+%     model.ue.data.sc_ue_sep(model.config.UEc:model.config.UEt,:) = pdist2(model.ue.data.coord(model.config.UEc:model.config.UEt,:),model.sector.coord,'euclidean')./1e3; % euclidean distance
+    model.ue.data.sc_ue_sep(model.config.UEc:model.config.UEt,:) =  sqrt((repmat(model.ue.data.coord(model.config.UEc:model.config.UEt,1),1,57)- repmat(model.sector.coord(:,1)',model.config.UEt,1)).^2....
+        +(repmat(model.ue.data.coord(model.config.UEc:model.config.UEt,2),1,57)- repmat(model.sector.coord(:,2)',model.config.UEt,1)).^2)./1e3;
+    
+    X = repmat(model.ue.data.coord(model.config.UEc:model.config.UEt,1),1,N)-repmat(reshape(model.bs.position(:,1),1,N),UEinitalTotal,1);siz = size(X);
+    Y = repmat(model.ue.data.coord(model.config.UEc:model.config.UEt,2),1,N)-repmat(reshape(model.bs.position(:,2),1,N),UEinitalTotal,1);
+    idxXpos =reshape(X>=0,siz);idxXneg = reshape(X<0,siz);idxYpos = reshape(Y>=0,siz);idxYneg = reshape(Y<0,siz);quad1 = idxXpos & idxYpos;quad2 = idxXneg & idxYpos;quad3 = idxXneg & idxYneg;quad4 = idxXpos & idxYneg;
+    angle_ue(quad1) = atand(Y(quad1)./X(quad1));angle_ue(quad2) = atand(Y(quad2)./X(quad2))+180;angle_ue(quad3) = atand(Y(quad3)./X(quad3))+180;angle_ue(quad4) = atand(Y(quad4)./X(quad4))+360;
+    % plot(model.ue.data.coord(quad1(:,1),1),model.ue.data.coord(quad1(:,1),2),
+    % 'k*')
+        %     text(model.ue.data.coord(100,1),model.ue.data.coord(100,1),num2str(an
+    %     gle_ue(100,1)),'HorizontalAlignment','center')
+    model.ue.data.angle(model.config.UEc:model.config.UEt,:) = round(angle_ue);
+    model.bs.data.g_tx(model.config.UEc:model.config.UEt,:) = reshape(model.bs.data.radiation_pattern (:,(model.ue.data.angle(model.config.UEc:model.config.UEt,:)+1)'),Nsector,UEinitalTotal)';
+    
+    switch model.config.environment
+        case 'Urban'
+            model.config.mcl = 70;  % dB
+            L(model.config.UEc:model.config.UEt,:) = urbanTimesFactor*log10(model.ue.data.bs_ue_sep(model.config.UEc:model.config.UEt,:))+urbanMinusFactor;
+        case 'Rural'
+            model.config.mcl  = 80; % dB
+            Hb  = 45;
+            L(:,:,model.config.UEc:model.config.UEt) = 69.55+26.16*log10(f)-13.82*log10(Hb)+44.9-6.55*log10(Hb)*log(model.ue.data.bs_ue_sep(:,n,model.config.UEc:model.config.UEt))-4.78*(log10(f)).^2+18.33*log10(f)-40.94;
+    end
+
+    % Downlink (Log Normal Fading, Pathloss, all UE RX Pwr )
+    Log_fad(model.config.UEc:model.config.UEt,:) = randn(UEinitalTotal,Nsector) .*sigma;
+    model.ue.data.pathloss(model.config.UEc:model.config.UEt,:) = L(model.config.UEc:model.config.UEt,:)+Log_fad(model.config.UEc:model.config.UEt,:);
+    
+    [ model ] = sectorAssign( model, L );
+
+    model.ue.data.measuredCL(model.config.UEc:model.config.UEt,:) = max(model.ue.data.pathloss(model.config.UEc:model.config.UEt,:) - model.bs.data.g_tx(model.config.UEc:model.config.UEt,:) - model.ue.g_rx,model.config.mcl );
+    model.ue.data.all_rx_pwr_dB(model.config.UEc:model.config.UEt,:) = model.bs.tx_pwr - model.ue.data.measuredCL(model.config.UEc:model.config.UEt,:); % coupling loss
+    model.ue.data.rx_pwr_dB(model.config.UEc:model.config.UEt,1) = model.ue.data.all_rx_pwr_dB(model.indexing);
+    model.ue.data.mcl(model.config.UEc:model.config.UEt,1) = model.ue.data.measuredCL(model.indexing);
+
+    [ model] = upDataSectorAssignment( model);
+
+    % UE Power Control model.ue.POpus
+    model.ue.data.Ppusch(model.config.UEc:model.config.UEt,:) = repmat(min(model.ue.tx_pwr,model.ue.POpusch+(model.ue.alpha*model.ue.data.mcl(model.config.UEc:model.config.UEt,1))),1,Nsector);
+    
+    % Uplink (Log Normal Fading, Pathloss, all UE RX Pwr )
+    model.bs.data.all_rx_pwr_dB(model.config.UEc:model.config.UEt,:) = model.ue.data.Ppusch(model.config.UEc:model.config.UEt,:) - model.ue.data.measuredCL(model.config.UEc:model.config.UEt,:); % coupling loss
+    model.bs.data.rx_pwr_dB(model.config.UEc:model.config.UEt,1) = model.bs.data.all_rx_pwr_dB(model.indexing);
+    
+    [ model ] = checkForValidData( model );
+
+    model.config.UEc = model.config.UEt+1;
+    model.config.UEt = model.config.UEt+UEinitalTotal;
+    padsize = UEinitalTotal;
+end
+[ data ] = dataCollection( model );
+end
+
+function [ model ] = sectorAssign( model, L )
+% Initial Assignment
+tmp_rxPwr(model.config.UEc:model.config.UEt,:) = model.bs.tx_pwr - max(L(model.config.UEc:model.config.UEt,:) - model.bs.data.g_tx(model.config.UEc:model.config.UEt,:) - model.ue.g_rx,model.config.mcl ); % coupling loss
+[~, model.ue.sectorAssign(model.config.UEc:model.config.UEt,1)]=max(tmp_rxPwr(model.config.UEc:model.config.UEt,:),[],2);
+a = (model.config.UEc:model.config.UEt)';b = model.ue.sectorAssign(model.config.UEc:model.config.UEt,1)-1;A = model.config.UEt;
+model.indexing  = (b.*A)+a;
+model.ue.sectorAssign(model.config.UEc:model.config.UEt,3)= model.ue.sectorAssign(model.config.UEc:model.config.UEt,1);
+model.ue.sectorAssign(model.config.UEc:model.config.UEt,2)= model.config.sectorID(2,model.ue.sectorAssign(model.config.UEc:model.config.UEt,1));
+model.ue.sectorAssign(model.config.UEc:model.config.UEt,4)= model.ue.sectorAssign(model.config.UEc:model.config.UEt,2);
+end
+
+function [ model, indexing] = upDataSectorAssignment( model)
+[mcl_perSector idxSector]  = min(model.ue.data.measuredCL,[],2);
+idxHandover = find((model.ue.data.mcl -mcl_perSector)>3); %3dB Handover
+a = idxHandover;b = idxSector(idxHandover)-1;A = model.config.UEt;indexing  = (b.*A)+a;
+    
+model.ue.sectorAssign(idxHandover,3) = idxSector(idxHandover);
+model.ue.sectorAssign(idxHandover,4)   = model.config.sectorID(2,idxSector(idxHandover));
+model.ue.cellAssign(idxHandover,2) = model.config.sectorID(3,idxSector(idxHandover));
+model.ue.data.rx_pwr_dB(idxHandover) = model.ue.data.all_rx_pwr_dB(indexing);
+model.indexing(idxHandover) = indexing;
+end
+
+function [ model ] = checkForValidData( model )
+
+if length(unique(model.ue.sectorAssign(:,3))) == model.config.NumSectors
+    N = length(model.config.NumSecidx);
+    for NumSec = 1:N
+        idx = find(model.ue.sectorAssign(:,3)==model.config.NumSecidx(NumSec));
+        Nidx = length(idx);
+         if (Nidx>=model.config.mindataSetSize)
+             model.config.idxAvailable{:,model.config.NumSecidx(NumSec)} = idx;
+             model.config.idxSize(1,model.config.NumSecidx(NumSec)) = length(idx);
+             model.config.loaded(model.config.NumSecidx(NumSec)) = 1;
+            if sum(model.config.loaded)==model.config.NumSectors
+                model.config.mazSize = min(model.config.idxSize);
+                model.config.idx = zeros(model.config.mazSize,model.config.NumSectors);  
+            end
+         else
+             break
+         end
+    end
+
+end
+end
+
+function [ data ] = dataCollection( model )
+
+[ data.config.ThroughputTable ] = Ttable(  );
+
+fullLoad = model.config.Loaded;
+for n = 1:model.config.NumSectors
+    model.config.idx(:,n) = model.config.idxAvailable{1,n}(1:model.config.mazSize);
+end
+dataSetSize = floor(model.config.mazSize/fullLoad)*fullLoad;
+idx.rowStart=1;
+idx.rowEnd = fullLoad;
+data.downlink.snir = zeros(dataSetSize,3);
+data.uplink.snir = zeros(dataSetSize,3);
+data.downlink.thru = zeros(dataSetSize,3);
+data.uplink.thru = zeros(dataSetSize,3);
+data.downlink.thru_agg = zeros(dataSetSize/fullLoad,3); 
+data.uplink.thru_agg = zeros(dataSetSize/fullLoad,3); 
+data.downlink.interference = zeros(dataSetSize,3);
+data.uplink.interference = zeros(dataSetSize,3);
+model.ue.NumRBsPerUE = (model.config.NumRbpersub*model.config.NumRb/fullLoad);
+
+for n = 1:dataSetSize/fullLoad
+    idx.n = n;
+    a = (idx.rowStart:idx.rowEnd)';b = (1:model.config.NumSectors)-1;A = model.config.mazSize;
+    indexing  = (repmat(b,fullLoad,1).*A)+repmat(a,1,model.config.NumSectors);
+    indexingData = model.config.idx(indexing);
+    for i = 1:model.config.sector_size
+        idx.i=i;
+        [ data ] = dataCal( model,data,indexingData,idx );
+    end
+    idx.rowStart = idx.rowStart+fullLoad;
+    idx.rowEnd = idx.rowEnd+fullLoad;
+end
+end
+
+function [ data ] = dataCal( model,data,indexingData,idx )
+% Gets rx pwr seen at UE from all basestations for each idx.i, where idx.i
+% represents the sector number, in this case 1,2,3. model.config.resuseidx
+% defines the UEs using the same frequency channel.
+ue_rx_pwr_dB_ALL = model.ue.data.all_rx_pwr_dB(indexingData(:,idx.i),model.config.reuseidx(idx.i,:)); % get recieved power for BS for ue
+ue_rx_pwr_lin_ALL = 10.^(ue_rx_pwr_dB_ALL./10);
+
+% Gets the rx pwr seen at the BS from all UEs for each idx.i, where idx.i
+% represents the sector number of the UE with the wanted signal
+bs_rx_pwr_dB_ALL = reshape(model.bs.data.all_rx_pwr_dB(indexingData(:),idx.i),model.config.Loaded,model.config.NumSectors); % get recieved power for BS for ue
+bs_rx_pwr_dB_ALL = bs_rx_pwr_dB_ALL(:,model.config.reuseidx(idx.i,:));
+bs_rx_pwr_lin_ALL = 10.^(bs_rx_pwr_dB_ALL./10);
+if model.config.reuse~=3
+    ue_rx_pwr_lin_ALL(:,idx.i)=[];
+    bs_rx_pwr_lin_ALL(:,idx.i)=[];
+else
+    ue_rx_pwr_lin_ALL(:,1)=[];
+    bs_rx_pwr_lin_ALL(:,1)=[];
+end
+
+% DownLink
+ue_interference = sum(ue_rx_pwr_lin_ALL,2);
+data.downlink.interference(idx.rowStart:idx.rowEnd,idx.i) = 10*log10(ue_interference);
+ue_rx_pwr_dB = model.ue.data.rx_pwr_dB(indexingData(:,idx.i));
+data.downlink.snir(idx.rowStart:idx.rowEnd,idx.i) = ue_rx_pwr_dB-10*log10(model.ue.NoisePwr_lin+ue_interference);
+[~,idx_dl] = ismember(round(data.downlink.snir(idx.rowStart:idx.rowEnd,idx.i)), data.config.ThroughputTable(:,1));
+data.downlink.thru(idx.rowStart:idx.rowEnd,idx.i) = model.config.NumRb*data.config.ThroughputTable(idx_dl(:,1),4)./1e3;
+data.downlink.thru_agg(idx.n,idx.i) = sum(data.downlink.thru(idx.rowStart:idx.rowEnd,idx.i)/model.ue.NumRBsPerUE);
+
+% Uplink
+bs_interference = sum(bs_rx_pwr_lin_ALL,2);
+data.uplink.interference(idx.rowStart:idx.rowEnd,idx.i) = 10*log10(bs_interference);
+bs_rx_pwr_dB = model.bs.data.rx_pwr_dB(indexingData(:,idx.i));
+data.uplink.snir(idx.rowStart:idx.rowEnd,idx.i) = bs_rx_pwr_dB-10*log10(model.bs.NoisePwr_lin+bs_interference);% Check
+[~,idx_ul] = ismember(round(data.uplink.snir(idx.rowStart:idx.rowEnd,idx.i)), data.config.ThroughputTable(:,1));
+data.uplink.thru(idx.rowStart:idx.rowEnd,idx.i) = model.config.NumRb*data.config.ThroughputTable(idx_ul(:,1),5)./1e3;
+data.uplink.thru_agg(idx.n,idx.i) = sum(data.uplink.thru(idx.rowStart:idx.rowEnd,idx.i)/model.ue.NumRBsPerUE);
+
+end
+
+function [ ThroughputTable ] = Ttable(  )
+ThroughputTable = [...
+-99	0	0	0	0
+-98	0	0	0	0
+-97	0	0	0	0
+-96	0	0	0	0
+-95	0	0	0	0
+-94	0	0	0	0
+-93	0	0	0	0
+-92	0	0	0	0
+-91	0	0	0	0
+-90	0	0	0	0
+-89	0	0	0	0
+-88	0	0	0	0
+-87	0	0	0	0
+-86	0	0	0	0
+-85	0	0	0	0
+-84	0	0	0	0
+-83	0	0	0	0
+-82	0	0	0	0
+-81	0	0	0	0
+-80	0	0	0	0
+-79	0	0	0	0
+-78	0	0	0	0
+-77	0	0	0	0
+-76	0	0	0	0
+-75	0	0	0	0
+-74	0	0	0	0
+-73	0	0	0	0
+-72	0	0	0	0
+-71	0	0	0	0
+-70	0	0	0	0
+-69	0	0	0	0
+-68	0	0	0	0
+-67	0	0	0	0
+-66	0	0	0	0
+-65	0	0	0	0
+-64	0	0	0	0
+-63	0	0	0	0
+-62	0	0	0	0
+-61	0	0	0	0
+-60	0	0	0	0
+-59	0	0	0	0
+-58	0	0	0	0
+-57	0	0	0	0
+-56	0	0	0	0
+-55	0	0	0	0
+-54	0	0	0	0
+-53	0	0	0	0
+-52	0	0	0	0
+-51	0	0	0	0
+-50	0	0	0	0
+-49	0	0	0	0
+-48	0	0	0	0
+-47	0	0	0	0
+-46	0	0	0	0
+-45	0	0	0	0
+-44	0	0	0	0
+-43	0	0	0	0
+-42	0	0	0	0
+-41	0	0	0	0
+-40	0	0	0	0
+-39	0	0	0	0
+-38	0	0	0	0
+-37	0	0	0	0
+-36	0	0	0	0
+-35	0	0	0	0
+-34	0	0	0	0
+-33	0	0	0	0
+-32	0	0	0	0
+-31	0	0	0	0
+-30	0	0	0	0
+-29	0	0	0	0
+-28	0	0	0	0
+-27	0	0	0	0
+-26	0	0	0	0
+-25	0	0	0	0
+-24	0	0	0	0
+-23	0	0	0	0
+-22	0	0	0	0
+-21	0	0	0	0   
+-20	0	0	0	0
+-19	0	0	0	0
+-18	0	0	0	0
+-17	0	0	0	0
+-16	0	0	0	0
+-15	0	0	0	0
+-14	0	0	0	0
+-13	0	0	0	0
+-12	0	0	0	0
+-11	0	0	0	0
+-10	0.08	0.06	31	21
+-9	0.10	0.07	38	26
+-8	0.13	0.08	48	32
+-7	0.16	0.10	59	39
+-6	0.19	0.13	73	48
+-5	0.24	0.16	89	59
+-4	0.29	0.19	109	73
+-3	0.35	0.23	132	88
+-2	0.42	0.28	159	106
+-1	0.51	0.34	190	127
+0	0.60	0.40	225	150
+1	0.71	0.47	265	176
+2	0.82	0.55	308	206
+3	0.95	0.63	356	237
+4	1.09	0.72	408	272
+5	1.23	0.82	463	309
+6	1.39	0.93	521	347
+7	1.55	1.04	582	388
+8	1.72	1.15	646	430
+9	1.90	1.26	711	474
+10	2.08	1.38	778	519
+11	2.26	1.51	847	565
+12	2.44	1.63	917	611
+13	2.63	1.76	988	658
+14	2.82	1.88	1059	706
+15	3.02	2.00	1131	750
+16	3.21	2.00	1204	750
+17	3.41	2.00	1277	750
+18	3.60	2.00	1350	750
+19	3.80	2.00	1424	750
+20	3.99	2.00	1498	750
+21	4.19	2.00	1572	750
+22	4.39	2.00	1646	750
+23	4.40	2.00	1650	750
+24	4.40	2.00	1650	750
+25	4.40	2.00	1650	750
+26	4.40	2.00	1650	750
+27	4.40	2.00	1650	750
+28	4.40	2.00	1650	750
+29	4.40	2.00	1650	750
+30	4.40	2.00	1650	750
+31	4.40	2.00	1650	750
+32	4.40	2.00	1650	750
+33	4.40	2.00	1650	750
+34	4.40	2.00	1650	750
+35	4.40	2.00	1650	750
+36	4.40	2.00	1650	750
+37	4.40	2.00	1650	750
+38	4.40	2.00	1650	750
+39	4.40	2.00	1650	750
+40	4.40	2.00	1650	750
+41	4.40	2.00	1650	750
+42	4.40	2.00	1650	750
+43	4.40	2.00	1650	750
+44	4.40	2.00	1650	750
+45	4.40	2.00	1650	750
+46	4.40	2.00	1650	750
+47	4.40	2.00	1650	750
+48	4.40	2.00	1650	750
+49	4.40	2.00	1650	750
+50	4.40	2.00	1650	750];
+end
+

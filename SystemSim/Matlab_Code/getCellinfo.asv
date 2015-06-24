@@ -1,0 +1,17 @@
+function [ model ] = getCellinfo( model )
+R = model.sector_info.R;
+a = sqrt(3)*R;
+A = 2*R;
+r = a/2;
+theta = pi/3;
+ISD = 3*R;
+MaxRadius = mode.config.Num
+model.sector_info.R = R;
+model.sector_info.A = A;
+model.sector_info.a = a;
+model.sector_info.r = r;
+model.sector_info.theta = theta;
+model.sector_info.ISD = ISD;
+
+end
+

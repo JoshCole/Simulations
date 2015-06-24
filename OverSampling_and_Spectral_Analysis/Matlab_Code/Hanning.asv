@@ -1,0 +1,9 @@
+function [ win ] = Hanning( N )
+n =1:N;
+win = 0.5*(1-cos((2*pi*n)/(N-1)));
+U = win'*win;
+% U = win'*win;
+% % win = win/U;
+% Wn = Wn/(N/2);
+end
+

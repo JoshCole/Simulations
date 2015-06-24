@@ -1,0 +1,27 @@
+function [ F1, F2, Channel ] = getChannelData( fc , F, data )
+if length(fc) ==1
+    if fc~=0
+        [F1min F1] = min(abs(F-(fc-2.5)));
+    else
+        [F1min F1] = min(abs(F-(fc)));
+    end
+    [F2min F2] = min(abs(F-(fc+2.5)));
+    Channel = data(1,F1:F2-1);
+    F1 = F(F1);
+    F2 = F(F2);
+else
+    for i = 1:length(fc)
+        if fc(i)~=0
+            [F1min F1] = min(abs(F-(fc-2.5)));
+        else
+            [F1min F1] = min(abs(F-(fc)));
+        end
+        [F2min F2] = min(abs(F-(fc+2.5)));
+        Channel = data(1,F1:F2-1);
+        F1(i) = F(F1);
+        F2(i) = F(F2);
+    end
+end
+    
+end
+

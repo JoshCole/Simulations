@@ -1,0 +1,63 @@
+close all
+clear all
+
+m = [29 34 25];
+Nrs_zc = 63;
+colList = hsv(length(m));
+figure
+hold on
+for i = 1:length(m)
+    for n = 0:Nrs_zc-1
+        ZadoffChu(n+1) = exp(-1i*(pi*m(i)*n*(n+1))/Nrs_zc);
+        Leg{i} = ['Root ', num2str(m(i))];
+    end
+    
+    [F T]=CyclicCorr(ZadoffChu,ZadoffChu);
+    stem(real(T),'col',colList(i,:))
+    
+end 
+grid on
+set(gca, 'FontSize',14); 
+xlabel('Index');
+ylabel('Amplitude');
+legend(Leg)
+
+hold off
+% M Sequence
+G = [1 0 0 0 0 1 1]; 
+GF = G(2:end); 
+N = length(G)-1;  
+M = 2^N-1; 
+Reg = zeros(1,N); 
+x = zeros(M,1);
+
+% Initalise Reg 
+Reg(end)=1;   
+ 
+for n = 1:M
+    buffer = mod(sum(GF.*Reg),2);      % Caluculate New Bit
+    Reg = [buffer,Reg(1:N-1)];         % Shift Register   
+    x(n) = Reg(N);
+end
+ReferenceSignal = (x.*2-1).';
+[ ReferenceSignalFreq, ReferenceSignalTime ] = CyclicCorr( ReferenceSignal,ReferenceSignal );
+figure
+stem(real(ReferenceSignalTime))
+grid on
+set(gca, 'FontSize',14); 
+xlabel('Index');
+ylabel('Amplitude');
+legend(['M-sequence, M = ',num2str(M)])
+
+
+
+%     [F T]=CyclicCorr(r_u_v,r_u_v);
+    Leg{i} = ['Msc ', num2str(M_RS_sc)];
+    stem(real(r_u_v),'col',colList(i,:))
+grid on
+set(gca, 'FontSize',14); 
+xlabel('Index');
+ylabel('Amplitude');
+legend(Leg)
+hold off
+

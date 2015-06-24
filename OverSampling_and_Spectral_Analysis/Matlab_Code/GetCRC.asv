@@ -1,0 +1,126 @@
+function [ A, B ] = GetCRC(mode, Packet, Parity )
+% GetCRC
+%
+% Calculates A and B, Dependent on Transmit or Recieve Mode
+% Transmit :    A = Packet with Parity, B = Packet Length
+% Recieve  :    A = Packet minus Parity, B = Error True or False
+%
+% Usage :
+%               [ A, B ] = GetCRC(mode, packet, parity )
+%
+% Where         mode = Transmitter or Reciever
+%               
+%               Packet = Equally Likely distribution of Logic 1 and 0 of
+%               size PacketSize defined in M-Ary Simulation
+%
+%               Parity = NaN, 'gCRC8', 'gCRC16', 'gCRC24B', 'gCRC24A'
+
+if isnan(Parity)
+    A = Packet;
+    B = length(Packet);
+    return
+else
+    % Parity configuration
+    % --------------------
+    switch Parity
+        case 'gCRC24A'
+            gCRC = [1 1 0 0 0 0 1 1 0 0 1 0 0 1 1 0 0 1 1 1 1 1 0 1 1];
+            ParitySize = 24;
+        case 'gCRC24B'
+            gCRC = [1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0 0 1 1];
+            ParitySize = 24;
+        case 'gCRC16'
+            gCRC = [1 0 0 0 1 0 0 0 0 0 0 1 0 0 0 0 1];
+            ParitySize = 16;
+        case 'gCRC8'
+            gCRC = [1 0 0 1 1 ];
+            ParitySize = 8;
+%             gCRC = [1 1 0 0 1 1 0 1 1];
+%             ParitySize = 8;
+    end
+
+    GF = gCRC(2:end-1);
+    n=ParitySize;
+    CRC = zeros(1,n);
+    if strcmp(mode,'Transmitter') == true
+        nPacket = [Packet,CRC];
+    elseif strcmp(mode,'Reciever') == true
+        nPacket = Packet;
+    end
+    for i = 1:length(nPacket)
+        if CRC(1) == 0
+            CRC = [CRC(2:n),nPacket(i)]; % Shift Left
+        else                             % If the MSB is equalt to 1 Xor with Divisor and shift left
+            CRC(1:n-1)=xor(GF,CRC(2:n)); % Replace all bit except for the new input bit
+            CRC(n)= xor(1, nPacket(i)); 
+        end
+    end
+
+%     tempReg = zeros(1, ParitySize+1);
+% 
+%     for i = 1:length(nPacket)
+%         if CRC(1) == 0
+%             CRC = [CRC(2:end),nPacket(i)]; % Shift Left
+%         else                             % If the MSB is equalt to 1 Xor with Divisor and shift left
+%             tempReg(:) = xor(gCRC,[CRC,nPacket(i)]); % CRC plus new packet
+%             CRC(:) = tempReg(2:end); % Shift Left
+%         end
+%     end
+
+    if strcmp(mode,'Transmitter') == true
+        A = [Packet,CRC];
+        B = length(A);
+
+    % CRC Error check
+    % -----------------
+    elseif strcmp(mode,'Reciever') == true
+        if sum(CRC) >=1
+            B = true;
+        else
+            B = false;
+        end
+            A = Packet(1:end-ParitySize);
+    end
+
+
+  
+%     % Frame adjustment in respect to Tx or Rx
+%     % ---------------------------------------
+%     if strcmp(mode,'Transmitter') == true
+%         [M N]=size(gCRC);
+%         newpacket = [Packet false(1,N-1)];
+%     elseif strcmp(mode,'Reciever') == true
+%         newpacket = Packet;
+%     end
+% 
+%     % Deconvolution and polynomial division
+%     % -------------------------------------
+%     [q rem]=deconv(newpacket,gCRC);
+%     rem=abs(rem);
+%     for i=1:length(rem)
+%         if ( mod(rem(i),2)== 0 )
+%             rem(i)=false;
+%         else
+%             rem(i)=true;
+%         end
+%     end
+% 
+%     % Frame to Transmit
+%     % -----------------
+%     nPacket = double(bitor(logical(newpacket),logical(rem)));
+%     if strcmp(mode,'Transmitter') == true
+%         A = nPacket;
+%         B = length(nPacket);
+% 
+%     % CRC Error check
+%     % -----------------
+%     elseif strcmp(mode,'Reciever') == true
+%         B = false;
+%         if sum(rem)>0
+%             B = true;
+%         end
+%         A = Packet(1:end-ParitySize);
+%     end
+% end
+end
+

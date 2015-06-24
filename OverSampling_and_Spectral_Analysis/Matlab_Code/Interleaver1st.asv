@@ -1,0 +1,42 @@
+function [ yi, Xi, R1] = Interleaver1st( ti,TTI )
+% EncodeBranch
+%
+% Encodes each state to determine branch metric values
+%
+% Usage :
+%               [ codeWord, nextState ] = EncodeBranch( register, genPoly,
+%               numGenPoly, Memory)
+%
+% Where         ti = Is the current Packet, Coded or Uncoded
+%               TTi = Transmision Time Interval Index
+
+% Inter Column Permutation, Reduces burst error by effectily mixing the Packet up
+% -------------------------------------------------------------------------------
+
+InterColumnPermutation{1} = 0;
+InterColumnPermutation{2} = [0 1];
+InterColumnPermutation{3} = [0 2 1 3];
+InterColumnPermutation{4} = [0 4 2 6 1 5 3 7];
+c1Array= [1 2 4 8];     % Number of Columns for associated TTI Index i.e Index 4 splits Packet into 8 frames
+
+Xi = length(ti);        % Length of current Packet Coded or Uncoded
+C1 = c1Array(TTI);      % Number of Frames
+R1 = Xi/C1;             % Number of Rows
+yi = zeros(R1,C1);      % Interleaver
+
+
+% Create Interleaving Matrix
+% --------------------------
+for i = 0:R1-1
+    c1Index = i*C1;
+    for ii = 1:C1
+        yi(i+1,ii) = ti(c1Index+ii);
+    end
+end
+
+% Use inter column permutation pattern
+yi = yi(:,InterColumnPermutation{TTI}+1);
+
+
+end
+

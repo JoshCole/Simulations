@@ -1,0 +1,72 @@
+function [ data ] = dataCollection( model )
+
+[ data.config.ThroughputTable ] = Ttable(  );
+
+fullLoad = model.config.Loaded;
+for n = 1:model.config.NumSectors
+    model.config.idx(:,n) = model.config.idxAvailable{1,n}(1:model.config.mazSize);
+end
+    idx.rowStart=1;
+    idx.rowEnd = fullLoad;
+    data.downlink.snir = zeros(model.config.dataSetSize,3);
+    data.uplink.snir = zeros(model.config.dataSetSize,3);
+    data.downlink.thru = zeros(model.config.dataSetSize,3);
+    data.uplink.thru = zeros(model.config.dataSetSize,3);
+    data.downlink.thru_agg = zeros(model.config.dataSetSize/fullLoad,3); 
+    data.uplink.thru_agg = zeros(model.config.dataSetSize/fullLoad,3); 
+    model.ue.NumRBsPerUE = (model.config.NumRbpersub*model.config.NumRb/fullLoad);
+
+for n = 1:model.config.dataSetSize/fullLoad
+    idx.n = n;
+    a = (idx.rowStart:idx.rowEnd)';b = (1:model.config.NumSectors)-1;A = model.config.mazSize;
+    indexing  = (repmat(b,fullLoad,1).*A)+repmat(a,1,model.config.NumSectors);
+    indexingData = model.config.idx(indexing);
+    for i = 1:model.config.sector_size
+        idx.i=i;
+        [ data ] = dataCal( model,data,indexingData,idx );
+    end
+    idx.rowStart = idx.rowStart+fullLoad;
+    idx.rowEnd = idx.rowEnd+fullLoad;
+end
+% [~,idx_dl] = ismember(round(snir_dl),ThroughputTable(:,1));
+% [~,idx_ul] = ismember(round(snir_ul),ThroughputTable(:,1));
+% for i = 1:3
+%     thru_dl(:,idx.i) = model.config.NumRb*ThroughputTable(idx_dl(:,i),4)./1e3;
+%     thru_ul(:,idx.i) = model.config.NumRb*ThroughputTable(idx_ul(:,i),5)./1e3;
+% end
+% generateCDF( snir_dl, thru_dl, snir_ul, thru_ul, thru_dl_agg, thru_ul_agg )
+
+end
+
+function [ data ] = dataCal( model,data,indexingData,idx )
+        
+        ue_rx_pwr_dB_ALL = model.ue.data.all_rx_pwr_dB(indexingData(:,idx.i),model.config.reuseidx(idx.i,:)); % get recieved power for BS for ue
+        ue_rx_pwr_lin_ALL = 10.^(ue_rx_pwr_dB_ALL./10);
+        bs_rx_pwr_dB_ALL = model.bs.data.all_rx_pwr_dB(indexingData(:,idx.i),model.config.reuseidx(idx.i,:)); % get recieved power for BS for ue
+        bs_rx_pwr_lin_ALL = 10.^(bs_rx_pwr_dB_ALL./10);
+        if model.config.reuse~=3
+            ue_rx_pwr_lin_ALL(:,idx.i)=[];
+            bs_rx_pwr_lin_ALL(:,idx.i)=[];
+        else
+            ue_rx_pwr_lin_ALL(:,1)=[];
+            bs_rx_pwr_lin_ALL(:,1)=[];
+        end
+        
+        % DownLink
+        ue_interference = sum(ue_rx_pwr_lin_ALL,2);
+        ue_rx_pwr_dB = model.ue.data.rx_pwr_dB(indexingData(:,idx.i));
+        data.downlink.snir(idx.rowStart:idx.rowEnd,idx.i) = ue_rx_pwr_dB-10*log10(model.ue.NoisePwr_lin+ue_interference);
+        [~,idx_dl] = ismember(round(data.downlink.snir(idx.rowStart:idx.rowEnd,idx.i)), data.config.ThroughputTable(:,1));
+        data.downlink.thru(idx.rowStart:idx.rowEnd,idx.i) = model.config.NumRb*data.config.ThroughputTable(idx_dl(:,1),4)./1e3;
+        data.downlink.thru_agg(idx.n,idx.i) = sum(data.downlink.thru(idx.rowStart:idx.rowEnd,idx.i)/model.ue.NumRBsPerUE);
+
+        % Uplink
+        bs_interference = sum(bs_rx_pwr_lin_ALL,2);
+        bs_rx_pwr_dB = model.bs.data.rx_pwr_dB(indexingData(:,idx.i));
+        data.uplink.snir(idx.rowStart:idx.rowEnd,idx.i) = bs_rx_pwr_dB-10*log10(model.bs.NoisePwr_lin+bs_interference);% Check
+        [~,idx_ul] = ismember(round(snir_ul(idx.rowStart:idx.rowEnd,idx.i)), data.config.ThroughputTable(:,1));
+        data.uplink.thru(idx.rowStart:idx.rowEnd,idx.i) = model.config.NumRb*data.config.ThroughputTable(idx_ul(:,1),5)./1e3;
+        data.uplink.thru_agg(idx.n,idx.i) = sum(data.uplink.thru(idx.rowStart:idx.rowEnd,idx.i)/model.ue.NumRBsPerUE);
+
+end
+

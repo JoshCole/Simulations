@@ -1,0 +1,37 @@
+function [aout, thetaout y]=salehs_model(x,backoff,n)
+% This function implements Saleh’s model
+% x is the complex input vector of size n;
+% Back-off is in db; the input amplitude is scaled by
+% c=10^(backoff/20);
+% The maximum normalized input power should be less than 3 dB
+% i.e., 20 log10(a*abs(x)) < 3 dB
+y = zeros(1,n)*(1.0+1i); % initialize output array
+a1=2.1587; b1=1.15; % model parameters
+a2=4.0; b2=2.1; % model parameters
+c=10^(backoff/20); % backoff in dB
+for k=1:n
+ain = c*abs(x(k));
+thetain(k) = angle(x(k));
+aout = a1*ain/(1+b1*ain^2);
+thetapm(k) = a2*ain^4/(1+b2*ain^2);
+thetaout(k) = thetain(k)+thetapm(k);
+y(k) = aout*exp(i*thetaout(k));
+end;
+% End of function file.
+%%
+backoff = input('Enter backoff in dB > ');
+f1 = -1.0; f2 = 2.0; ts = 1.0/128; n = 1024;
+for k=1:n
+t(k) = (k-1)*ts;
+x(k) = exp(1i*2*pi*f1*t(k))+0.707*exp(1i*2*pi*f2*t(k));
+y(k) = salehs_model(x(k),-1*backoff,1);
+end
+[psdx,freq] = log_psd(x,n,ts);
+[psdy,freq] = log_psd(y,n,ts);
+figure
+subplot(2,1,1)
+plot(freq,psdx); grid; title('Input to the NL');
+ylabel('PSD in dB');
+subplot(2,1,2)
+plot(freq,psdy); grid; title('Output of the NL');
+ylabel('PSD in dB'); xlabel('Frequency in Hz');

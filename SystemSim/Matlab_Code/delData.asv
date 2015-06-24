@@ -1,0 +1,27 @@
+function [ model ] = delData( model )
+idxDelRow = model.config.idxDel(:,1);
+idxDelRow_Col = model.config.idxDel;
+
+% Delete UEs
+model.ue.data.coord(idxDelRow,:) =[];
+
+% Delete sector and Cell Assignment Data
+% UE
+model.ue.sectorAssign(idxDelRow,:) =[];
+model.ue.cellAssign(idxDelRow,:) =[];
+
+% Delete UE data
+model.ue.data.angle(idxDelRow,:) =[];
+model.ue.data.bs_ue_sep(idxDelRow_Col) =[];
+model.ue.data.pathloss(idxDelRow_Col) =[];
+model.ue.data.all_rx_pwr_dB(idxDelRow_Col) =[];
+model.ue.data.Ppusch(idxDelRow,:) =[];
+model.ue.data.rx_pwr_dB(idxDelRow,:) =[];
+model.ue.data.sc_ue_sep(idxDelRow_Col) =[];
+
+% Delete BS data
+model.bs.data.rx_pwr_dB(idxDelRow,:) =[];
+model.bs.data.all_rx_pwr_dB(idxDelRow_Col) =[];
+model.bs.data.g_tx(idxDelRow_Col) =[];
+end
+

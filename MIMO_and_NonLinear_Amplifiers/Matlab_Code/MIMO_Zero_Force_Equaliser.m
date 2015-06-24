@@ -1,0 +1,117 @@
+close all
+clear all
+
+% Number of Transmit Antenna's
+NTx = 2;
+% Number of Recieve Antenna's
+NRx = 2;
+NTxArray = [1, 2, 3 ,4 ,5, 6];
+
+% Configure Test
+% --------------
+EsNo_dB(:,1) = linspace(35, 0, 10); % Noise density dB
+EsNo_lin = 10.^(EsNo_dB / 10);      % Noise density linear   
+NumEsNo = length(EsNo_lin);         % Numb of Iterations
+
+M = 4;
+PacketSize = 256;
+NumberOfPackets = 1000;
+[ k, Es, Esnorm, Eb, Ebnorm, SymbolArray ] = GetSymbolArrayData( M );
+[ LLRBitArray, Logic, BitArraySize ] = LLRSymbolArray( SymbolArray, M, k );
+EbNo_lin = EsNo_lin/k;
+EbNo_dB = 10*log10(EbNo_lin);       % EbNo Scaling
+
+BitError = zeros(1,NumEsNo);
+BitErrorPacket = zeros(1,NumberOfPackets);
+AntennaVariation = length(NTxArray);
+figure
+colLit = hsv(AntennaVariation);
+for Ant = 1:AntennaVariation
+    NTx = NTxArray(Ant);
+    NRx = NTx;
+     for i = 1:NumEsNo
+        for ii = 1:NumberOfPackets
+            % Generate equally likely binary values
+            TxPacket = double(rand(NTx,PacketSize*k) > 0.5);
+            % Symbol idx for symbol array
+            [ TxSymbolIdx, TrCHFrameSize ] = SymbolIndex( TxPacket, k );
+            % Symbols
+            [ sn ] = SymbolArray(TxSymbolIdx); 
+            Nsym = length(sn);
+            % Transmit Antennas
+    %         sn = reshape(Symbols,NTx,Nsym/NTx);
+    %         sn = repmat(Symbols,[],NTx);
+
+            % Channel 
+            % ------- 
+            x = randn(NRx, NRx); y = randn(NRx, NRx); % Random Variables X and Y with Gaussian Distribution mean zero variance one
+            H =(x + 1i.*y)/sqrt(2);       % Normalised Ralyiegh random Variable
+            Hs = H*sn;
+            % Pseduo Inverse for a general m by n matrix
+    %         Htranspose = transpose(H);
+    %         HT_H = H*Htranspose;
+    %         invHT_H = inv(HT_H);
+    %         H_plus = Htranspose*invHT_H;
+            H_plus = pinv(H);
+            % AWGN
+            N = Nsym;
+            No = (Es./EsNo_lin(i));    % Noise Spectral Density
+            NoiseVar = No;             % Noise Variance
+            n = sqrt(No)*(randn(NRx,N)+1i*randn(NRx,N))*(1/sqrt(2));     % Normalised AWGN in respect to Esnorm
+
+            y = Hs+n;
+            yHat = H_plus*y;
+%             if ii ==1
+%                 [U,S,V] = svd(H)
+%                 conditionNumber = cond(H)
+%                 colList = hsv(NRx);
+%                 figure
+%                 for cl = 1:NRx
+%                 plot(y(cl,:),'p', 'col',colList(cl,:))
+%                 hold on
+%                 end
+% 
+%                 figure
+%                 for cl = 1:NRx
+%                 plot(yHat(cl,:),'p', 'col',colList(cl,:))
+%                 hold on
+%                 end
+%                 axis([-1 1 -1 1]);
+%             end
+
+            Rxbits = zeros(size(TxPacket)); 
+            for ntx = 1:NTx
+                 LLRData  = LLR( LLRBitArray, yHat(ntx,:), k, NoiseVar );
+                % Soft or Hard Decision
+                % ---------------------
+                [RxSoftDecision, RxHardDecision] = DecisionType( LLRData, k, PacketSize );
+                Rxbits(ntx,:) = RxHardDecision;
+            end
+            BitErrorPacket(ii) = mean(TxPacket(:) ~= Rxbits(:));
+        end
+        BitError(i) = sum(BitErrorPacket)/NumberOfPackets;
+     end
+     % Theoretical Data
+    % ----------------
+    switch M
+        case 1
+            bit_err_theo(:,1) = (1/k)*erfc(sqrt((k/Es)*EbNo_lin));
+            simb_error_theo(:,1) = erfc(sqrt((k/Es)*EbNo_lin));
+        case 2
+            bit_err_theo(:,1) = (1/(2*k))*erfc(sqrt((k/Es)*EbNo_lin));
+            simb_error_theo(:,1) = (1/2)*erfc(sqrt((k/Es)*EbNo_lin));
+        case 4
+            bit_err_theo(:,1) = ((1/k)*erfc(sqrt((k/Es)*EbNo_lin))-(1/(4*k))*erfc(sqrt((k/Es)*EbNo_lin)).^2);
+            simb_error_theo(:,1) = erfc(sqrt((k/Es)*EbNo_lin))-(1/4)*erfc(sqrt((k/Es)*EbNo_lin)).^2;
+        case 16
+            bit_err_theo(:,1) = (3/8)*erfc(sqrt((k/Es)*EbNo_lin));%((3/2)*(3/16)*erfc(sqrt((k/Es)*EbNo_lin))-(9/16)*(21/64)*erfc(sqrt((k/Es)*EbNo_lin)).^2);
+            simb_error_theo(:,1) = ((3/2)*erfc(sqrt((k/Es)*EbNo_lin))-(9/16)*erfc(sqrt((k/Es)*EbNo_lin)).^2);
+    end
+     semilogy(EbNo_dB,BitError,'col',colLit(Ant,:))
+     hold on
+     leg{Ant} =['ZF Simulation Nrx = Ntx = ',num2str(NTx)];
+end
+  legend(leg)
+ grid on
+ xlabel('EbNo dB')
+ ylabel('BER')

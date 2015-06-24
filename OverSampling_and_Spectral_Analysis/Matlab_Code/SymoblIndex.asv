@@ -1,0 +1,26 @@
+function [ TxSymbolIdx, newFrameSize ] = SymoblIndex( code, k )
+% SymoblIndex
+%
+% This function calculates the symbols to be transmited i.e ((0:k-1)+1)
+% where K is the number of bit in the M-ary.  This gives the Indexing
+% number for the symbol array not the deciama
+%
+% Usage :
+%
+% [Eini , Eplus , Eminus ] = GetRateMatchParameters ( DeltaNij , Nij , Fi )
+%
+% Where		DeltaNij	= Number of bits to puncture / repeat in each radio frame of TTI
+%
+%				Nij		= Number of bits in radio frame before rate matching
+%
+%				Fi			= Number of radio frame in TTI
+%
+%				Eini		= Initial value of e in rate matching algorithm
+%							  This is different for each frame in the TTI therefore
+%							  a vector is returned with each element containing
+%							  the parameter value for each parameter.
+TxBinarySymbols = reshape(code,1,k,[]);
+[m, n, newFrameSize] = size(TxBinarySymbols);
+TxSymbolIdx = Bi2Dec(TxBinarySymbols,k)+1;    
+end
+

@@ -1,0 +1,20 @@
+function [ NewPacketSize, ParitySize ] = GetPacketSize( PacketSize, Parity, CRC )
+
+% Parity Size
+% -----------
+switch parity
+    case 'gCRC24A'
+        ParitySize = 24;
+    case 'gCRC24B'
+        ParitySize = 24;
+    case 'gCRC16'
+        ParitySize = 16;
+    case 'gCRC8'
+        ParitySize = 8;
+end
+switch CRC
+    case 'CRC'
+        NewPacketSize = PacketSize - Parity;
+    case 'NoCRC'
+end
+

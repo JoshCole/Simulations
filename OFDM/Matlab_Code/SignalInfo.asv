@@ -1,0 +1,12 @@
+function [ Normx, ux, Ex, Px, XRMS, simga2, DCGain, PowerGain ] = SignalInfo( xn )
+N = length(xn);
+Averagepower = (1/N)*sum(xn);
+AbsolutePower = sum(abs(xn).^2);
+Power = Ex/N;
+RMS = sqrt(Px);
+simga2 = (1/N)*sum(abs(xn-ux).^2);
+DCGain = sum(abs(xn));
+PowerGain = DCGain^2; % Coherent Gain
+Normx = xn/PowerGain;
+end
+

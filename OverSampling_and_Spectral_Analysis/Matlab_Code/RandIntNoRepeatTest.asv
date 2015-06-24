@@ -1,0 +1,10 @@
+len = 200;
+lenUpdate = len;
+fullArray(1:len) = 1;
+while lenUpdate
+    unqArray = randi([1 1000],[1 lenUpdate]);
+    tempArray = unique([fullArray,unique(unqArray)]);
+    lenTempArray= length(tempArray);
+    fullArray(1:lenTempArray) = tempArray;
+    lenUpdate = len -lenTempArray;
+end

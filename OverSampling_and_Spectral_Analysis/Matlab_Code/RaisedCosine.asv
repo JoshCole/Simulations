@@ -1,0 +1,61 @@
+function [ h ] = RaisedCosine( alpha, fs )
+t_Tc =-fs:1/fs:fs;
+
+rrcNum = sin(pi*t_Tc).*cos(pi*alpha*t_Tc);
+rrcDen = (pi*t_Tc).*(1-(2*alpha*t_Tc).^2);
+h = rrcNum./rrcDen;
+
+% L'hopital's rule Implementation
+% -------------------------------
+
+indexZ = find(t_Tc==0);                 % Find associated index points
+% indexAlpha = find(t_Tc==1/(2*alpha));
+indexAlpha = find(t_Tc==1/(2*alpha));
+
+if isempty(indexZ)~= 1
+    for i = 1:length(indexZ)
+        h(indexZ(i)) = 1;%cos(alpha*pi*t_Tc)/(1-(2*alpha*t_Tc)^2);
+    end
+end
+if isempty(indexAlpha) ~= 1
+    for i = 1:length(indexAlpha)
+        h(indexAlpha(i)) = pi/4*sin(pi*t_Tc)/(pi*t_Tc);%(alpha/(2*pi))*sin(pi^2/(2*alpha));
+    end
+end
+
+%Raised Cosine Filter
+
+L=length(t_Tc); %Filter Length
+R=1; %Data Rate = 1Mbps
+T=1/R;
+Ts=1/fs;
+
+
+
+%Raised Cosing Filter Design
+
+%----------------------------------------------------------
+
+if mod(L,2)==0
+    M=L/2 ; % for even value of L
+else
+    M=(L-1)/2; % for odd value of L
+end
+
+g=zeros(1,L); %Place holder for RC filter's transfer function
+
+for n=-M:M
+    num=sin(pi*n*Ts/T)*cos(alpha*pi*n*Ts/T);
+    den=(pi*n*Ts/T)*(1-(2*alpha*n*Ts/T)^2);
+
+    g(n+M+1)=num/den;        
+
+    if (1-(2*alpha*n*Ts/T)^2)==0
+         g(n+M+1)=pi/4*sin(pi*n*Ts/T)/(pi*n*Ts/T);
+    end
+    if  n==0
+         g(n+M+1)=cos(alpha*pi*n*Ts/T)/(1-(2*alpha*n*Ts/T)^2);
+    end
+end
+%-----
+end

@@ -1,0 +1,145 @@
+close all
+clear all
+Bandwith = 4.5e6;
+deltaF = 15e3;
+Nfft = 512;
+T = 1/deltaF;
+Ts = T/Nfft;
+Nsubcarriers = 300;
+TimeSample = (0:Nsubcarriers-1)*Ts;
+
+h = [2 -1 -1 1 -1 -2 2 1 -3 1 3 -4 0 5 -4 -3 8 -2 -7 9 2 -12 7 9 -16 2 18 -17 -9 28 -12 -26 37 3 -55 45 46 -128 49 538];
+InterperlationFilter =[-5 0 30 0 -103 0 278 0 -697 0 2545 4096 2545 0 -697 0 278 0 -103 0 30 0 -5];
+OFDM_Filter = [ h fliplr(h)];
+
+DCGain = sum(OFDM_Filter);
+OFDM_Filter_Norm =OFDM_Filter/DCGain;
+
+DCGain = sum(InterperlationFilter);
+InterperlationFilter_Norm = InterperlationFilter/DCGain;
+
+M = 2;
+[ k, Es, Esnorm, Eb, Ebnorm, SymbArray ] = GetSymbolArrayData( M );
+numBits = k*Nsubcarriers;
+
+SubCarrierIndex = [-Nsubcarriers/2:-1 1: Nsubcarriers/2];
+
+Bits = rand(1,numBits) > 0.5;
+
+% Generate Symbol Index
+[ Idx, BlockSize ] = SymbolIndex( Bits, k );
+        
+% Generate Symbols
+Symbols = SymbArray(Idx);
+
+% Generate OFDM Symbol
+OFDMSymbol = zeros(1,Nfft);
+OFDMSymbol(SubCarrierIndex+Nfft/2+1) = Symbols;
+powerOFDMSymbol = mean(abs(OFDMSymbol).^2);
+outputIDFT = ifft(fftshift(OFDMSymbol),Nfft)*sqrt(Nfft);
+poweroutputIDFT = mean(abs(outputIDFT).^2);
+
+% Generate Cyclic Prefic
+Ncp = 36;
+CyclicPrefix = outputIDFT((Nfft-Ncp)+1:Nfft);
+outputIDFT_CP = [CyclicPrefix outputIDFT];
+poweroutputIDFT_CP = mean(abs(outputIDFT_CP).^2);
+
+% Apply Filter
+OFDM_Filtered = conv(outputIDFT_CP,OFDM_Filter_Norm);
+
+% % Oversample
+% OversampleRate = 4;
+% N = length(OFDM_Filtered);
+% OVA = zeros(1,OversampleRate*N);
+% OVA(1:OversampleRate:end) = OFDM_Filtered;
+
+% Oversample
+OversampleRate = 8;
+temp = 2;
+NumberofOversamples = 1;
+while(temp~=OversampleRate)
+    temp = temp*2;
+    NumberofOversamples = NumberofOversamples+1;
+end
+
+
+for ova = 1:NumberofOversamples
+    N = length(OFDM_Filtered);
+    OVA = zeros(1,2*N);
+    OVA(1:2:end) = OFDM_Filtered;
+    OFDM_Filtered = conv(OVA,InterperlationFilter_Norm);
+end
+x = OFDM_Filtered;
+% Apply Interperation Filter
+% x = conv(OVA,InterperlationFilter_Norm);
+
+%backoff = input('Enter backoff in dB > ');
+backoff = 0;
+%ts = 1/(OversampleRate*7.68e6);
+ts = 1/128;
+X = x;
+n = length(X);
+%backoff =0;
+for N = 1:length(backoff)
+    x=X;
+    for k=1:n
+
+        [ AM_AM(k), AM_PM(k), y(k) ] = AmplifierModel(x(k),backoff(N) );
+        x(k) = 10^(-1*backoff(N)/20).*x(k);
+    end
+    tsx = 1/length(x);
+    tsy = 1/length(y);
+    [psdx,freq] = log_psd(x,Nfft,ts);
+    [psdy,freq] = log_psd(y,Nfft,ts);
+    figure
+    grid on
+    plot(20*log10(abs((fft(x)*1/sqrt(length(x))))))
+    hold on
+    plot(20*log10(abs((fft(y)*1/sqrt(length(y))))),'r')
+    yLim([-200,0])
+    grid on
+    figure
+    plot(freq,fftshift(psdx))
+    hold on
+    plot(freq,fftshift(psdy),'r')
+    grid on
+    
+    figure
+    subplot(2,1,1)
+    plot(real(x)); grid; title('Input to the NL');
+    ylabel('PSD in dB');
+    subplot(2,1,2)
+    plot(real(y)); grid; title('Output of the NL');
+    ylabel('PSD in dB'); xlabel('Frequency in Hz');
+
+    [ freq, psdx ] = WelchEstimate( x, Nfft, ts );
+    [ freq, psdy ] = WelchEstimate( y, Nfft, ts );
+
+    figure
+    subplot(2,1,1)
+    plot(freq,psdx); grid; title('Input to the NL');
+    ylabel('PSD in dB');
+    subplot(2,1,2)
+    plot(freq,psdy); grid; title('Output of the NL');
+    ylabel('PSD in dB'); xlabel('Frequency in Hz');
+
+    figure
+    pin = 10*log10(abs(x)); % input power in dB
+    pout = 10*log10(abs(y)); % output power in dB
+    plot(pin,pin,'r'); 
+    hold on
+    plot(pin,pin-1,'g')
+    plot(pin,pout); grid;
+    xlabel('Input power - dB')
+    ylabel('Output power - dB')
+    legend('Input','1 dB Change', 'Output')
+    %axis([-10 0 -10 0])
+
+    figure
+    plot(pin,10*log10(abs(y./x)))
+    grid on
+
+    EVM = sqrt(mean((abs(y-x).^2))/mean(abs(x).^2));
+    disp(num2str(EVM))
+end

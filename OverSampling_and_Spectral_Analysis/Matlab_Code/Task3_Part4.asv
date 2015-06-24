@@ -1,0 +1,249 @@
+clear all 
+close all
+AFilter = ...  
+[0.0008
+    0.0005
+   -0.0000
+   -0.0006
+   -0.0012
+   -0.0015
+   -0.0011
+    0.0000
+    0.0017
+    0.0033
+    0.0039
+    0.0029
+   -0.0000
+   -0.0040
+   -0.0076
+   -0.0088
+   -0.0063
+    0.0000
+    0.0084
+    0.0157
+    0.0181
+    0.0129
+   -0.0000
+   -0.0173
+   -0.0327
+   -0.0387
+   -0.0288
+    0.0000
+    0.0451
+    0.0989
+    0.1500
+    0.1867
+    0.2000
+    0.1867
+    0.1500
+    0.0989
+    0.0451
+    0.0000
+   -0.0288
+   -0.0387
+   -0.0327
+   -0.0173
+   -0.0000
+    0.0129
+    0.0181
+    0.0157
+    0.0084
+    0.0000
+   -0.0063
+   -0.0088
+   -0.0076
+   -0.0040
+   -0.0000
+    0.0029
+    0.0039
+    0.0033
+    0.0017
+    0.0000
+   -0.0011
+   -0.0015
+   -0.0012
+   -0.0006
+   -0.0000
+    0.0005
+    0.0008
+];
+pulseShaping = ...
+    [
+       -0.0000
+   -0.0003
+   -0.0007
+   -0.0010
+   -0.0013
+   -0.0015
+   -0.0014
+   -0.0009
+    0.0000
+    0.0013
+    0.0029
+    0.0045
+    0.0058
+    0.0063
+    0.0056
+    0.0036
+   -0.0000
+   -0.0048
+   -0.0101
+   -0.0153
+   -0.0190
+   -0.0203
+   -0.0180
+   -0.0113
+    0.0000
+    0.0156
+    0.0347
+    0.0558
+    0.0770
+    0.0963
+    0.1118
+    0.1218
+    0.1253
+    0.1218
+    0.1118
+    0.0963
+    0.0770
+    0.0558
+    0.0347
+    0.0156
+    0.0000
+   -0.0113
+   -0.0180
+   -0.0203
+   -0.0190
+   -0.0153
+   -0.0101
+   -0.0048
+   -0.0000
+    0.0036
+    0.0056
+    0.0063
+    0.0058
+    0.0045
+    0.0029
+    0.0013
+    0.0000
+   -0.0009
+   -0.0014
+   -0.0015
+   -0.0013
+   -0.0010
+   -0.0007
+   -0.0003
+   -0.0000
+];
+
+
+M = 4;
+
+[ k, Es, Esnorm, Eb, Ebnorm, SymbolArray ] = GetSymbolArrayData( M );
+numBits = k*(2^8);
+Txbits = double(rand(1,numBits) > 0.5);
+[ TxSymbolIdx, TrCHFrameSize ] = SymbolIndex( Txbits, k );
+[ TxSymbol ] = SymbolArray(TxSymbolIdx);
+numSymbols = length(TxSymbol);
+
+FsArray = 8;
+for i = 1:length(FsArray)
+    Fs = FsArray(i);
+    txUpSample = zeros(Fs*numSymbols,1);
+    txUpSample(1:Fs:end) = TxSymbol;
+    
+    PulseShapedResponse = conv(pulseShaping,txUpSample);
+    RectPulse = conv(ones(Fs,1)/Fs,txUpSample);
+    NPSR = length(PulseShapedResponse);
+    
+    % Frequency Response
+    
+    Nfft = 1024;
+    Nh = length(pulseShaping);
+    zeroPad = zeros(Nfft -Nh,1);
+    
+    h = [pulseShaping;zeroPad];
+    H = fft(h);
+    f = -Fs/2:Fs/(Nfft-1):Fs/2;
+    HShift = fftshift(abs(H));
+    
+    figure
+    subplot(2,1,1);
+    plot(f,20*log10(HShift));
+    xlabel('Frequency');
+    ylabel('Amplitude');
+    title('Frequency Response of Sinc family filter');
+    legend('Pulse Shaping Filter')
+    
+    % Filter Peak
+   [Peak, index] =max(pulseShaping);
+    index = index-1;
+    % Pulse Shaping
+    PulseShapedResponse2 = PulseShapedResponse;
+    PulseShapedResponse2(1:index)=[];
+    t = (0:length(PulseShapedResponse2)-1)/Fs;
+    subplot(2,1,2);plot(t,real(PulseShapedResponse2));
+    hold on
+    t = (0:length(RectPulse)-1)/Fs;
+    plot(t,real(RectPulse),'r')
+    axis([0 20 -1.25/Fs 1.25/Fs])
+    xlabel('Time (sec)');
+    ylabel('Amplitude');
+    title(['Analogue Filtered, Over Sampled Fs = ',num2str(Fs)]);
+    legend('Pulse Shaped Signal','Rectangular Pulse Shapped')
+    pause 
+    
+    % Applying Analogue Filter
+    Filteredsig = conv(AFilter,PulseShapedResponse);
+    [Peak2, index2] =max(AFilter);
+    index = index+index2;
+    
+    figure
+    t = (0:length(PulseShapedResponse2)-1)/Fs;
+    plot(t,real(PulseShapedResponse2));
+    hold on
+    t = (0:length(RectPulse)-1)/Fs;
+    plot(t,real(RectPulse),'r')
+    
+    Filteredsig2 = Filteredsig;
+    Filteredsig2(1:index)=[];
+    t = (0:length(Filteredsig)-1)/Fs;
+    plot(t,real(Filteredsig),'g');
+    axis([0 20 -1.25/Fs 1.25/Fs])
+    xlabel('Time (sec)');
+    ylabel('Amplitude');
+    title(['Analogue Filtered, Over Sampled Fs = ',num2str(Fs)]);
+    legend('Pulse Shaped Signal','Rectangular Pulse Shapped')
+    pause
+    
+    figure
+    subplot(2,1,1)
+    X = fft(PulseShapedResponse);
+    f = -Fs/2:Fs/(length(X)-1):Fs/2;
+    XShift = fftshift(abs(X));
+    plot(f,20*log10(XShift));
+    axis([-4 4 -100 50])
+    subplot(2,1,2)
+    X = fft(Filteredsig);
+    f = -Fs/2:Fs/(length(X)-1):Fs/2;
+    XShift = fftshift(abs(X));
+    plot(f,20*log10(XShift));
+    axis([-4 4 -200 50])
+    pause
+    
+     val = 65;
+    [eyeD] = eyeDiagram( val , PulseShapedResponse );
+    
+    figure
+    plot(eyeD,'b')
+    title('Eye Diagram Rect Filtered Signal');
+    pause
+    
+   [eyeD] = eyeDiagram( val , Filteredsig );
+    
+    figure
+    plot(eyeD,'b')
+    title('Eye Diagram Rect Filtered Signal');
+    pause
+
+end

@@ -1,0 +1,30 @@
+function [ llrStates ] = BranchMetric( Decision, LLR, BranchLogicValues, BranchRows, numGenPoly,txCRCPacketLength )
+switch Decision
+    case 'SoftDecision'
+        % LLR Branch Metric
+        llrTest = zeros(numGenPoly,txCRCPacketLength);
+        llrStates = zeros(BranchRows,txCRCPacketLength);
+
+        % temp1 = branchValues(:,:,1);
+        for i = 1:BranchRows
+            for ii = 1:numGenPoly
+                if BranchLogicValues(i,ii)==0
+                   temp = -LLR(:,:,ii);
+                else
+                    temp = +LLR(:,:,ii);
+                end
+                llrTest(ii,:)=temp;
+            end
+            llrStates(i,:) = sum(llrTest);
+        end
+    case 'HardDecision'
+        for i = 1:stages-1
+            currentCodeWord = repmat(codeBlock(i,:),states,1);
+            for ii = 1:numInput
+                hammDistance(:,ii,i) = sum(branchValues(:,:,ii)~=currentCodeWord,numInput);
+            end
+            strucStages(i).HammDistance = hammDistance(:,:,i);
+        end
+end
+end
+
